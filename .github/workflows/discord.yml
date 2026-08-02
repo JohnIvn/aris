@@ -18,7 +18,32 @@ jobs:
           curl \
           -H "Content-Type: application/json" \
           -d "{
-            \"content\":\"GitHub Event: $GITHUB_EVENT_NAME\nRepository: $GITHUB_REPOSITORY\nUser: $GITHUB_ACTOR\nBranch: $GITHUB_REF_NAME\"
+            \"embeds\": [{
+              \"title\": \"GitHub Event: $GITHUB_EVENT_NAME\",
+              \"color\": 5793266,
+              \"fields\": [
+                {
+                  \"name\": \"Repository\",
+                  \"value\": \"$GITHUB_REPOSITORY\",
+                  \"inline\": true
+                },
+                {
+                  \"name\": \"User\",
+                  \"value\": \"$GITHUB_ACTOR\",
+                  \"inline\": true
+                },
+                {
+                  \"name\": \"Branch\",
+                  \"value\": \"$GITHUB_REF_NAME\",
+                  \"inline\": true
+                },
+                {
+                  \"name\": \"Commit\",
+                  \"value\": \"$GITHUB_SHA\",
+                  \"inline\": false
+                }
+              ]
+            }]
           }" \
           $DISCORD_WEBHOOK
 
@@ -30,7 +55,32 @@ jobs:
           curl \
           -H "Content-Type: application/json" \
           -d "{
-            \"content\":\"GitHub Release\nRepository: $GITHUB_REPOSITORY\nUser: $GITHUB_ACTOR\nRelease: ${{ github.event.release.tag_name }}\nURL: ${{ github.event.release.html_url }}\"
+            \"embeds\": [{
+              \"title\": \"GitHub Release\",
+              \"color\": 10181046,
+              \"fields\": [
+                {
+                  \"name\": \"Repository\",
+                  \"value\": \"$GITHUB_REPOSITORY\",
+                  \"inline\": true
+                },
+                {
+                  \"name\": \"User\",
+                  \"value\": \"$GITHUB_ACTOR\",
+                  \"inline\": true
+                },
+                {
+                  \"name\": \"Release\",
+                  \"value\": \"${{ github.event.release.tag_name }}\",
+                  \"inline\": true
+                },
+                {
+                  \"name\": \"URL\",
+                  \"value\": \"${{ github.event.release.html_url }}\",
+                  \"inline\": false
+                }
+              ]
+            }]
           }" \
           $DISCORD_RELEASE_WEBHOOK
 
