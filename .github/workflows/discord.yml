@@ -6,7 +6,9 @@ on:
   release:
 
 jobs:
+
   discord:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +41,11 @@ jobs:
                 {
                   \"name\": \"Commit SHA\",
                   \"value\": \"$GITHUB_SHA\",
+                  \"inline\": false
+                },
+                {
+                  \"name\": \"Commit Message\",
+                  \"value\": \"${{ github.event.head_commit.message || github.event.pull_request.title }}\",
                   \"inline\": false
                 },
                 {
@@ -94,8 +101,8 @@ jobs:
                   \"inline\": false
                 },
                 {
-                  \"name\": \"Commit SHA\",
-                  \"value\": \"$GITHUB_SHA\",
+                  \"name\": \"Release Notes\",
+                  \"value\": \"${{ github.event.release.body }}\",
                   \"inline\": false
                 },
                 {
@@ -133,7 +140,7 @@ jobs:
             echo "detected=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send Security message
+      - name: Send Security Alert
         if: steps.scan.outputs.detected == 'true'
         env:
           DISCORD_SECURITY_WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK }}
@@ -170,6 +177,11 @@ jobs:
                 {
                   \"name\": \"Commit SHA\",
                   \"value\": \"$GITHUB_SHA\",
+                  \"inline\": false
+                },
+                {
+                  \"name\": \"Commit Message\",
+                  \"value\": \"${{ github.event.head_commit.message }}\",
                   \"inline\": false
                 },
                 {
