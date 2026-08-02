@@ -15,53 +15,66 @@ jobs:
       - name: Send Discord message
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         run: |
+
+          JSON=$(jq -n \
+            --arg title "GitHub Event: $GITHUB_EVENT_NAME" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg user "$GITHUB_ACTOR" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg sha "$GITHUB_SHA" \
+            --arg message "$COMMIT_MESSAGE" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" \
+            --arg time "$(date -u)" \
+            '{
+              embeds: [{
+                title: $title,
+                color: 5793266,
+                fields: [
+                  {
+                    name: "Repository",
+                    value: $repo,
+                    inline: true
+                  },
+                  {
+                    name: "User",
+                    value: $user,
+                    inline: true
+                  },
+                  {
+                    name: "Branch",
+                    value: $branch,
+                    inline: true
+                  },
+                  {
+                    name: "Commit SHA",
+                    value: $sha,
+                    inline: false
+                  },
+                  {
+                    name: "Commit Message",
+                    value: $message,
+                    inline: false
+                  },
+                  {
+                    name: "Commit URL",
+                    value: $url,
+                    inline: false
+                  },
+                  {
+                    name: "Time",
+                    value: $time,
+                    inline: false
+                  }
+                ]
+              }]
+            }')
+
           curl \
           -H "Content-Type: application/json" \
-          -d "{
-            \"embeds\": [{
-              \"title\": \"GitHub Event: $GITHUB_EVENT_NAME\",
-              \"color\": 5793266,
-              \"fields\": [
-                {
-                  \"name\": \"Repository\",
-                  \"value\": \"$GITHUB_REPOSITORY\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"User\",
-                  \"value\": \"$GITHUB_ACTOR\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"Branch\",
-                  \"value\": \"$GITHUB_REF_NAME\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"Commit SHA\",
-                  \"value\": \"$GITHUB_SHA\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Commit Message\",
-                  \"value\": \"${{ github.event.head_commit.message || github.event.pull_request.title }}\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Commit URL\",
-                  \"value\": \"https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Time\",
-                  \"value\": \"$(date -u)\",
-                  \"inline\": false
-                }
-              ]
-            }]
-          }" \
-          $DISCORD_WEBHOOK
+          -d "$JSON" \
+          "$DISCORD_WEBHOOK"
 
 
   release:
@@ -73,58 +86,71 @@ jobs:
         env:
           DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
         run: |
+
+          JSON=$(jq -n \
+            --arg title "GitHub Event: release" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg user "$GITHUB_ACTOR" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg release "${{ github.event.release.tag_name }}" \
+            --arg notes "${{ github.event.release.body }}" \
+            --arg url "${{ github.event.release.html_url }}" \
+            --arg time "$(date -u)" \
+            '{
+              embeds: [{
+                title: $title,
+                color: 10181046,
+                fields: [
+                  {
+                    name: "Repository",
+                    value: $repo,
+                    inline: true
+                  },
+                  {
+                    name: "User",
+                    value: $user,
+                    inline: true
+                  },
+                  {
+                    name: "Branch",
+                    value: $branch,
+                    inline: true
+                  },
+                  {
+                    name: "Release",
+                    value: $release,
+                    inline: false
+                  },
+                  {
+                    name: "Release Notes",
+                    value: $notes,
+                    inline: false
+                  },
+                  {
+                    name: "Release URL",
+                    value: $url,
+                    inline: false
+                  },
+                  {
+                    name: "Time",
+                    value: $time,
+                    inline: false
+                  }
+                ]
+              }]
+            }')
+
           curl \
           -H "Content-Type: application/json" \
-          -d "{
-            \"embeds\": [{
-              \"title\": \"GitHub Event: release\",
-              \"color\": 10181046,
-              \"fields\": [
-                {
-                  \"name\": \"Repository\",
-                  \"value\": \"$GITHUB_REPOSITORY\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"User\",
-                  \"value\": \"$GITHUB_ACTOR\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"Branch\",
-                  \"value\": \"$GITHUB_REF_NAME\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"Release\",
-                  \"value\": \"${{ github.event.release.tag_name }}\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Release Notes\",
-                  \"value\": \"${{ github.event.release.body }}\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Release URL\",
-                  \"value\": \"${{ github.event.release.html_url }}\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Time\",
-                  \"value\": \"$(date -u)\",
-                  \"inline\": false
-                }
-              ]
-            }]
-          }" \
-          $DISCORD_RELEASE_WEBHOOK
+          -d "$JSON" \
+          "$DISCORD_RELEASE_WEBHOOK"
 
 
   security:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -140,61 +166,76 @@ jobs:
             echo "detected=false" >> $GITHUB_OUTPUT
           fi
 
+
       - name: Send Security Alert
         if: steps.scan.outputs.detected == 'true'
         env:
           DISCORD_SECURITY_WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
+
           FILES=$(cat detected.txt)
+
+          JSON=$(jq -n \
+            --arg title "GitHub Event: security" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg user "$GITHUB_ACTOR" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg files "$FILES" \
+            --arg sha "$GITHUB_SHA" \
+            --arg message "$COMMIT_MESSAGE" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" \
+            --arg time "$(date -u)" \
+            '{
+              embeds: [{
+                title: $title,
+                color: 16711680,
+                fields: [
+                  {
+                    name: "Repository",
+                    value: $repo,
+                    inline: true
+                  },
+                  {
+                    name: "User",
+                    value: $user,
+                    inline: true
+                  },
+                  {
+                    name: "Branch",
+                    value: $branch,
+                    inline: true
+                  },
+                  {
+                    name: "Detected Files",
+                    value: $files,
+                    inline: false
+                  },
+                  {
+                    name: "Commit SHA",
+                    value: $sha,
+                    inline: false
+                  },
+                  {
+                    name: "Commit Message",
+                    value: $message,
+                    inline: false
+                  },
+                  {
+                    name: "Commit URL",
+                    value: $url,
+                    inline: false
+                  },
+                  {
+                    name: "Time",
+                    value: $time,
+                    inline: false
+                  }
+                ]
+              }]
+            }')
 
           curl \
           -H "Content-Type: application/json" \
-          -d "{
-            \"embeds\": [{
-              \"title\": \"GitHub Event: security\",
-              \"color\": 16711680,
-              \"fields\": [
-                {
-                  \"name\": \"Repository\",
-                  \"value\": \"$GITHUB_REPOSITORY\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"User\",
-                  \"value\": \"$GITHUB_ACTOR\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"Branch\",
-                  \"value\": \"$GITHUB_REF_NAME\",
-                  \"inline\": true
-                },
-                {
-                  \"name\": \"Detected Files\",
-                  \"value\": \"$FILES\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Commit SHA\",
-                  \"value\": \"$GITHUB_SHA\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Commit Message\",
-                  \"value\": \"${{ github.event.head_commit.message }}\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Commit URL\",
-                  \"value\": \"https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA\",
-                  \"inline\": false
-                },
-                {
-                  \"name\": \"Time\",
-                  \"value\": \"$(date -u)\",
-                  \"inline\": false
-                }
-              ]
-            }]
-          }" \
-          $DISCORD_SECURITY_WEBHOOK
+          -d "$JSON" \
+          "$DISCORD_SECURITY_WEBHOOK"
