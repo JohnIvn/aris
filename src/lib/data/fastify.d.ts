@@ -1,12 +1,12 @@
 import 'fastify';
-import { UserRole } from './types';
+import { UserRoles } from './types';
 
 declare module 'fastify' {
   interface FastifyRequest {
     user?: {
       id: string;
       email?: string;
-      role: UserRole;
+      role: UserRoles;
     };
 
     cookies: {

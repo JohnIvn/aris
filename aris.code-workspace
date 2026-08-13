@@ -1,0 +1,14 @@
+{
+  "folders": [
+	{
+		"path": "../ARIS-App"
+	},
+	{
+		"path": "."
+	},
+	{
+		"path": "../aris-vista"
+	}
+],
+  "settings": {}
+}
