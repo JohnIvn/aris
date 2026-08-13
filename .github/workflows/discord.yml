@@ -6,7 +6,6 @@ on:
   release:
 
 jobs:
-
   discord:
     if: github.event_name != 'release'
     runs-on: ubuntu-latest
@@ -76,7 +75,6 @@ jobs:
           -d "$JSON" \
           "$DISCORD_WEBHOOK"
 
-
   release:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
@@ -145,14 +143,25 @@ jobs:
           -d "$JSON" \
           "$DISCORD_RELEASE_WEBHOOK"
 
-
   security:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Detect sensitive files
         id: scan
@@ -166,6 +175,88 @@ jobs:
             echo "detected=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Run lint
+        id: lint
+        continue-on-error: true
+        run: |
+          npm run lint > lint.log 2>&1 || true
+          cat lint.log
+
+      - name: Send Lint Alert
+        if: steps.lint.outcome == 'failure'
+        env:
+          DISCORD_SECURITY_WEBHOOK: ${{ secrets.DISCORD_SECURITY_WEBHOOK }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+        run: |
+
+          ERRORS=$(grep -E "error" lint.log || true)
+          if [ -z "$ERRORS" ]; then
+            ERRORS="Linter reported a failure (see actions log)."
+          fi
+
+          JSON=$(jq -n \
+            --arg title "Lint Check Failed" \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg user "$GITHUB_ACTOR" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg errors "$ERRORS" \
+            --arg sha "$GITHUB_SHA" \
+            --arg message "$COMMIT_MESSAGE" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" \
+            --arg time "$(date -u)" \
+            '{
+              embeds: [{
+                title: $title,
+                color: 16711680,
+                fields: [
+                  {
+                    name: "Repository",
+                    value: $repo,
+                    inline: true
+                  },
+                  {
+                    name: "User",
+                    value: $user,
+                    inline: true
+                  },
+                  {
+                    name: "Branch",
+                    value: $branch,
+                    inline: true
+                  },
+                  {
+                    name: "Lint Errors",
+                    value: $errors,
+                    inline: false
+                  },
+                  {
+                    name: "Commit SHA",
+                    value: $sha,
+                    inline: false
+                  },
+                  {
+                    name: "Commit Message",
+                    value: $message,
+                    inline: false
+                  },
+                  {
+                    name: "Commit URL",
+                    value: $url,
+                    inline: false
+                  },
+                  {
+                    name: "Time",
+                    value: $time,
+                    inline: false
+                  }
+                ]
+              }]
+            }')
+
+          curl \
+          -H "Content-Type: application/json" \
+          -d "$JSON" \
+          "$DISCORD_SECURITY_WEBHOOK"
 
       - name: Send Security Alert
         if: steps.scan.outputs.detected == 'true'
