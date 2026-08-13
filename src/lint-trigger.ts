@@ -7,7 +7,9 @@ function fetchData(): Promise<string> {
   return Promise.resolve('data');
 }
 
-// @typescript-eslint/no-floating-promises: floating promise not awaited/handled
-fetchData();
+fetchData().catch((error) => {
+  console.error(error instanceof Error ? error.message : 'Error Lint Trigger');
+});
 
-const unusedVariable = 42; // @typescript-eslint/no-unused-vars (auto-fixable)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const unusedVariable = 42;
