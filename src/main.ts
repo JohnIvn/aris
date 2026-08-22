@@ -10,6 +10,7 @@ import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
 import multipart from '@fastify/multipart';
 import compress from '@fastify/compress';
+import chalk from 'chalk';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -76,7 +77,19 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
-  await app.listen(process.env.PORT ?? 3000);
+
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port, '0.0.0.0');
+
+  const address = app.getHttpServer().address();
+  const host =
+    typeof address === 'object' && address !== null
+      ? address.address
+      : 'localhost';
+  console.log(
+    chalk.bgGreen.black(`[SERVER] Running at http://${host}:${port}`),
+  );
+  console.log(chalk.bgGreen.black(`[SERVER] Visit http://localhost:${port}`));
 }
 
 bootstrap().catch((err) => {
