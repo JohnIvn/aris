@@ -6,6 +6,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { DatabaseModule } from './database/database.module';
+import { LoggerModule } from './logger/logger.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { DatabaseModule } from './database/database.module';
     RealtimeModule,
     PayrollModule,
     DatabaseModule,
+    LoggerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
