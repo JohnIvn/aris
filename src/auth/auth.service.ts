@@ -5,6 +5,7 @@ import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { UserData } from '../lib/data/auth.interface';
 import * as argon2 from 'argon2';
 import { JwtService } from '@nestjs/jwt';
+import { FastifyReply } from 'fastify';
 
 @Injectable()
 export class AuthService {
@@ -69,7 +70,8 @@ export class AuthService {
     return age;
   }
 
-  async signIn(data: SignInDto) {
+  // SIGNIN
+  async signIn(reply: FastifyReply, data: SignInDto) {
     try {
       const { email, password } = data;
 
@@ -81,7 +83,29 @@ export class AuthService {
 
       if (!verifyPassword) return ErrorHandler('Incorrect Password', 406, []);
 
-      return SuccessHandler('Successfully Signed In', 200, user);
+      const safeUser = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
+
+      const token = await this.jwtService.signAsync(safeUser, {
+        secret: process.env.JWT_SECRET!,
+        expiresIn: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      reply.cookie('token', token, {
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      reply.send({
+        message: 'Successfully Signed In',
+        data: { user: safeUser, token },
+      });
     } catch (error) {
       if (error instanceof Error) {
         ErrorHandler(error.message, 500, error.name);
@@ -90,6 +114,7 @@ export class AuthService {
     }
   }
 
+  // SIGNUP
   async signUp(data: SignUpDto) {
     try {
       const {
@@ -152,15 +177,23 @@ export class AuthService {
         role: user.role,
       };
 
-      const token = this.jwtService.sign(safeUser, {
-        secret: process.env.JWT_SECRET!,
-        expiresIn: 60 * 1000 * 60 * 24,
-      });
-
       return SuccessHandler('Successfully Registered User', 200, {
         user: safeUser,
-        token,
       });
+    } catch (error) {
+      if (error instanceof Error) {
+        ErrorHandler(error.message, 500, error.name);
+      }
+      ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  signout(reply: FastifyReply, token: string) {
+    try {
+      if (!token)
+        ErrorHandler('Error signing out, already signed out', 403, []);
+
+      reply.clearCookie(token);
     } catch (error) {
       if (error instanceof Error) {
         ErrorHandler(error.message, 500, error.name);

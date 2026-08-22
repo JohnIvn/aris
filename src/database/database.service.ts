@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import { createEnumTypes } from './models/enums.model';
 import { createUsers } from './models/users.model';
+import { createAuthLogs } from './models/auth_logs.model';
 
 dotenv.config();
 
@@ -65,6 +66,7 @@ export class DatabaseService implements OnModuleInit {
 
       await createEnumTypes(this.pool);
       await createUsers(this.pool);
+      await createAuthLogs(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {
       console.error(
