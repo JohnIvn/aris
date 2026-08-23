@@ -6,8 +6,8 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Max,
-  Min,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
 import {
   ACCOUNT_PROVIDER,
@@ -40,26 +40,25 @@ export class SignUpDto {
 
   @IsString()
   password!: string;
-
   @IsString()
-  @Max(20)
-  @Min(8)
+  @MinLength(8)
+  @MaxLength(20)
   username!: string;
 
   @IsString()
-  @Max(60)
-  @Min(2)
+  @MinLength(2)
+  @MaxLength(60)
   firstname!: string;
 
   @IsString()
   @IsOptional()
-  @Max(60)
-  @Min(2)
-  middlename!: string;
+  @MinLength(2)
+  @MaxLength(60)
+  middlename?: string;
 
   @IsString()
-  @Max(60)
-  @Min(2)
+  @MinLength(2)
+  @MaxLength(60)
   lastname!: string;
 
   @IsDateString()

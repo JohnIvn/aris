@@ -13,6 +13,8 @@ export async function createUsers(client: Pool) {
       lastname TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT,
+      birthday DATE DEFAULT NULL,
+      age INT DEFAULT NULL,
       provider TEXT,
       role member_role DEFAULT 'employee',
       failed_login_attempts INT NOT NULL DEFAULT 0,

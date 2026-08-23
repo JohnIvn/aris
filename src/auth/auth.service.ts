@@ -79,7 +79,7 @@ export class AuthService {
 
       if (!user) return ErrorHandler('User Not Found', 404, user);
 
-      const verifyPassword = await argon2.verify(user.password, password);
+      const verifyPassword = await argon2.verify(user.password_hash, password);
 
       if (!verifyPassword) return ErrorHandler('Incorrect Password', 406, []);
 
@@ -143,22 +143,38 @@ export class AuthService {
         return ErrorHandler('Missing required credentials', 400, errors);
       }
 
+      const password_hash = await argon2.hash(password);
+
       const response = await this.db.query(
-        `INSERT INTO users 
-        VALUES (email, firstname, lastname, middlename, password, username, avatar_url, age, birthday, provider, role)
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11        
-        `,
+        `
+        INSERT INTO users (
+          email,
+          firstname,
+          lastname,
+          middlename,
+          password_hash,
+          username,
+          avatar_url,
+          age,
+          birthday,
+          provider,
+          role
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *;
+      `,
         [
           email,
           firstname,
           lastname,
           middlename,
-          password,
+          password_hash,
           username,
           avatar_url,
           birthday && this.getUserAge(birthday),
-          provider,
-          role,
+          birthday,
+          provider ?? 'local',
+          role ?? 'employee',
         ],
       );
 
@@ -181,6 +197,7 @@ export class AuthService {
         user: safeUser,
       });
     } catch (error) {
+      console.error('SIGNUP DATABASE ERROR:', error);
       if (error instanceof Error) {
         ErrorHandler(error.message, 500, error.name);
       }

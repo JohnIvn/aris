@@ -4,7 +4,7 @@ export interface UserData {
   id?: string;
   avatar_url?: string;
   email: string;
-  password: string;
+  password_hash: string;
   username: string;
   firstname: string;
   middlename: string;
