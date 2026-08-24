@@ -10,6 +10,7 @@ export async function createAdminLogs(client: Pool) {
             admin_email TEXT REFERENCES users(email) ON DELETE SET NULL,
             user_id UUID REFERENCES users(id) ON DELETE SET NULL,
             user_email TEXT REFERENCES users(email) ON DELETE SET NULL,
+            metadata JSONB,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         )

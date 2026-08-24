@@ -2,6 +2,8 @@ import { Body, Controller, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto/auth.dto';
 import { type FastifyReply } from 'fastify';
+import { CurrentUser } from '../lib/decorators/cookie-decorator';
+import { type UserSession } from '../lib/data/interfaces';
 
 @Controller('auth')
 export class AuthController {
@@ -15,5 +17,14 @@ export class AuthController {
   @Post('signup')
   async signUp(@Body() data: SignUpDto) {
     return this.authService.signUp(data);
+  }
+
+  @Post('signout')
+  async signOut(
+    @CurrentUser() user: UserSession,
+    @Res() reply: FastifyReply,
+    @Body() token: string,
+  ) {
+    return this.authService.signOut(user, reply, token);
   }
 }

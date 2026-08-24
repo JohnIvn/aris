@@ -21,6 +21,7 @@ export class LoggerService {
         admin_id,
         user_email,
         user_id,
+        metadata,
       } = data;
       const response = await this.db.query<AdminLog>(
         `
@@ -30,8 +31,9 @@ export class LoggerService {
             admin_id,
             admin_email,
             user_id,
-            user_email
-        ) VALUES ( $1, $2, $3, $4, $5, $6)
+            user_email,
+            metadata
+        ) VALUES ( $1, $2, $3, $4, $5, $6, $7)
          RETURNING *;
         `,
         [
@@ -41,6 +43,7 @@ export class LoggerService {
           admin_email,
           user_id,
           user_email,
+          JSON.stringify(metadata),
         ],
       );
 
@@ -54,14 +57,21 @@ export class LoggerService {
       return SuccessHandler('Successfully recorded logs', 200, response);
     } catch (error) {
       if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error.name);
+        return ErrorHandler(error.message, 500, error.name);
       }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
   async logAuthAction(data: LoggerAuthDto) {
     try {
-      const { action_type, action_status, user_email, user_id, role } = data;
+      const {
+        action_type,
+        action_status,
+        user_email,
+        user_id,
+        role,
+        metadata,
+      } = data;
       const response = await this.db.query<AdminLog>(
         `
         INSERT INTO auth_logs (
@@ -69,11 +79,19 @@ export class LoggerService {
             action_status,
             user_id,
             user_email,
-            role
+            role,
+            metadata
         ) VALUES ( $1, $2, $3, $4, $5, $6)
          RETURNING *;
         `,
-        [action_type, action_status, user_id, user_email, role],
+        [
+          action_type,
+          action_status,
+          user_id,
+          user_email,
+          role,
+          JSON.stringify(metadata),
+        ],
       );
 
       if (!response)
@@ -86,9 +104,9 @@ export class LoggerService {
       return SuccessHandler('Successfully recorded logs', 200, response);
     } catch (error) {
       if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error.name);
+        return ErrorHandler(error.message, 500, error.name);
       }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
 }

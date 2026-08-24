@@ -6,12 +6,15 @@ import { UserData } from '../lib/data/auth.interface';
 import * as argon2 from 'argon2';
 import { JwtService } from '@nestjs/jwt';
 import { FastifyReply } from 'fastify';
+import { LoggerService } from '../logger/logger.service';
+import { UserSession } from '../lib/data/interfaces';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly jwtService: JwtService,
+    private readonly loggerService: LoggerService,
   ) {}
 
   private get db() {
@@ -77,11 +80,31 @@ export class AuthService {
 
       const user = await this.getUserByEmail(email);
 
-      if (!user) return ErrorHandler('User Not Found', 404, user);
+      if (!user) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signin',
+          role: undefined,
+          user_email: data.email,
+          user_id: undefined,
+          metadata: {},
+        });
+        return ErrorHandler('User Not Found', 404, user);
+      }
 
       const verifyPassword = await argon2.verify(user.password_hash, password);
 
-      if (!verifyPassword) return ErrorHandler('Incorrect Password', 406, []);
+      if (!verifyPassword) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signin',
+          role: user.role,
+          user_email: user.email,
+          user_id: user.id,
+          metadata: {},
+        });
+        return ErrorHandler('Incorrect Password', 406, []);
+      }
 
       const safeUser = {
         id: user.id,
@@ -102,15 +125,24 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
+      await this.loggerService.logAuthAction({
+        action_status: 'success',
+        action_type: 'signin',
+        role: safeUser.role,
+        user_email: safeUser.email,
+        user_id: safeUser.id,
+        metadata: {},
+      });
+
       reply.send({
         message: 'Successfully Signed In',
         data: { user: safeUser, token },
       });
     } catch (error) {
       if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error.name);
+        return ErrorHandler(error.message, 500, error.name);
       }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
 
@@ -140,6 +172,21 @@ export class AuthService {
       if (!birthday) errors.push('Birthday is required');
 
       if (errors.length > 0) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signup',
+          role: undefined,
+          user_email: undefined,
+          user_id: undefined,
+          metadata: {
+            email: email,
+            firstname: firstname,
+            middlename: middlename,
+            lastname: lastname,
+            birthday: birthday,
+            age: birthday ? this.getUserAge(birthday) : null,
+          },
+        });
         return ErrorHandler('Missing required credentials', 400, errors);
       }
 
@@ -193,29 +240,64 @@ export class AuthService {
         role: user.role,
       };
 
+      await this.loggerService.logAuthAction({
+        action_status: 'success',
+        action_type: 'signup',
+        role: user.role,
+        user_email: user.email,
+        user_id: user.id,
+        metadata: {
+          email: email,
+          firstname: firstname,
+          middlename: middlename,
+          lastname: lastname,
+          birthday: birthday,
+          age: birthday ? this.getUserAge(birthday) : null,
+        },
+      });
       return SuccessHandler('Successfully Registered User', 200, {
         user: safeUser,
       });
     } catch (error) {
       console.error('SIGNUP DATABASE ERROR:', error);
       if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error.name);
+        return ErrorHandler(error.message, 500, error.name);
       }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
 
-  signout(reply: FastifyReply, token: string) {
+  async signOut(user: UserSession, reply: FastifyReply, token: string) {
     try {
-      if (!token)
-        ErrorHandler('Error signing out, already signed out', 403, []);
+      if (!token) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signout',
+          role: user.role,
+          user_email: user.email,
+          user_id: user.id,
+          metadata: {
+            reason: 'Token does not exist',
+            code: 400,
+          },
+        });
+        return ErrorHandler('Error signing out, already signed out', 403, []);
+      }
 
+      await this.loggerService.logAuthAction({
+        action_status: 'success',
+        action_type: 'signout',
+        role: user.role,
+        user_email: user.email,
+        user_id: user.id,
+        metadata: {},
+      });
       reply.clearCookie(token);
     } catch (error) {
       if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error.name);
+        return ErrorHandler(error.message, 500, error.name);
       }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
 }

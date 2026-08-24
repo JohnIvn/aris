@@ -1,7 +1,7 @@
 import { AccountProvider, UserRoles } from './types';
 
 export interface UserData {
-  id?: string;
+  id: string;
   avatar_url?: string;
   email: string;
   password_hash: string;
@@ -11,6 +11,6 @@ export interface UserData {
   lastname: string;
   birthday?: string;
   age?: number;
-  role?: UserRoles;
-  provider?: AccountProvider;
+  role: UserRoles;
+  provider: AccountProvider;
 }

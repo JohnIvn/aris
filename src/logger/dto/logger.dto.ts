@@ -1,4 +1,11 @@
-import { IsEmail, IsEnum, IsString, IsUUID } from 'class-validator';
+import {
+  IsEmail,
+  IsEnum,
+  IsJSON,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import {
   ACTION_STATUS,
   type ActionStatus,
@@ -20,15 +27,22 @@ export class LoggerAuthDto {
 
   @IsUUID()
   @IsString()
-  user_id!: string;
+  @IsOptional()
+  user_id?: string;
 
   @IsEmail()
   @IsString()
-  user_email!: string;
+  @IsOptional()
+  user_email?: string;
 
   @IsEnum(USER_ROLES)
   @IsString()
-  role!: UserRoles;
+  @IsOptional()
+  role?: UserRoles;
+
+  @IsJSON()
+  @IsOptional()
+  metadata?: Record<string, any>;
 }
 
 export class LoggerAdminDto {
@@ -55,4 +69,8 @@ export class LoggerAdminDto {
   @IsEmail()
   @IsString()
   user_email!: string;
+
+  @IsJSON()
+  @IsOptional()
+  metadata?: Record<string, any>;
 }
