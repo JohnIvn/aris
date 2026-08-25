@@ -7,9 +7,7 @@ export async function createAdminLogs(client: Pool) {
             action_type admin_action,
             action_status action_status,
             admin_id UUID REFERENCES users(id) ON DELETE SET NULL,
-            admin_email TEXT REFERENCES users(email) ON DELETE SET NULL,
             user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-            user_email TEXT REFERENCES users(email) ON DELETE SET NULL,
             metadata JSONB,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()

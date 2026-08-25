@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { FastifyReply } from 'fastify';
 import { LoggerService } from '../logger/logger.service';
 import { UserSession } from '../lib/data/interfaces';
+import { getUserByEmail } from '../lib/utils/helpers';
 
 @Injectable()
 export class AuthService {
@@ -19,41 +20,6 @@ export class AuthService {
 
   private get db() {
     return this.databaseService.getClient();
-  }
-
-  private async getUserById(id: string) {
-    try {
-      return this.db.query(
-        `
-            SELECT * FROM users
-            WHERE id = $1`,
-        [id],
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error);
-      }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
-    }
-  }
-
-  private async getUserByEmail(email: string): Promise<UserData | undefined> {
-    try {
-      const user = await this.db.query(
-        `
-            SELECT * FROM users
-            WHERE email = $1 
-            LIMIT 1`,
-        [email ?? null],
-      );
-
-      return user.rows[0] as UserData;
-    } catch (error) {
-      if (error instanceof Error) {
-        ErrorHandler(error.message, 500, error);
-      }
-      ErrorHandler('Server Error', 500, 'Unknown Error');
-    }
   }
 
   private getUserAge(birthday: string | Date): number {
@@ -78,14 +44,13 @@ export class AuthService {
     try {
       const { email, password } = data;
 
-      const user = await this.getUserByEmail(email);
+      const user = await getUserByEmail(this.db, email);
 
       if (!user) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
           action_type: 'signin',
           role: undefined,
-          user_email: data.email,
           user_id: undefined,
           metadata: {},
         });
@@ -99,7 +64,6 @@ export class AuthService {
           action_status: 'failure',
           action_type: 'signin',
           role: user.role,
-          user_email: user.email,
           user_id: user.id,
           metadata: {},
         });
@@ -129,7 +93,6 @@ export class AuthService {
         action_status: 'success',
         action_type: 'signin',
         role: safeUser.role,
-        user_email: safeUser.email,
         user_id: safeUser.id,
         metadata: {},
       });
@@ -176,7 +139,6 @@ export class AuthService {
           action_status: 'failure',
           action_type: 'signup',
           role: undefined,
-          user_email: undefined,
           user_id: undefined,
           metadata: {
             email: email,
@@ -226,11 +188,7 @@ export class AuthService {
       );
 
       if (response.rowCount === 0)
-        return ErrorHandler(
-          'Error signing up, please try again later',
-          500,
-          [],
-        );
+        return ErrorHandler('Error signing up, please try again later', 500);
 
       const user = response.rows[0] as UserData;
 
@@ -244,7 +202,6 @@ export class AuthService {
         action_status: 'success',
         action_type: 'signup',
         role: user.role,
-        user_email: user.email,
         user_id: user.id,
         metadata: {
           email: email,
@@ -274,7 +231,6 @@ export class AuthService {
           action_status: 'failure',
           action_type: 'signout',
           role: user.role,
-          user_email: user.email,
           user_id: user.id,
           metadata: {
             reason: 'Token does not exist',
@@ -288,7 +244,6 @@ export class AuthService {
         action_status: 'success',
         action_type: 'signout',
         role: user.role,
-        user_email: user.email,
         user_id: user.id,
         metadata: {},
       });

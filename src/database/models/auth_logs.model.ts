@@ -7,7 +7,6 @@ export async function createAuthLogs(client: Pool) {
             action_type auth_action,
             action_status action_status,
             user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-            user_email TEXT REFERENCES users(email) ON DELETE SET NULL,
             role member_role DEFAULT 'employee',
             metadata JSONB,
             created_at TIMESTAMP DEFAULT NOW(),

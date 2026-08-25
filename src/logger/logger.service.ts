@@ -14,37 +14,19 @@ export class LoggerService {
 
   async logAdminAction(data: LoggerAdminDto) {
     try {
-      const {
-        action_type,
-        action_status,
-        admin_email,
-        admin_id,
-        user_email,
-        user_id,
-        metadata,
-      } = data;
+      const { action_type, action_status, admin_id, user_id, metadata } = data;
       const response = await this.db.query<AdminLog>(
         `
         INSERT INTO admin_logs (
             action_type,
             action_status,
             admin_id,
-            admin_email,
-            user_id,
-            user_email,
+            user_id, 
             metadata
-        ) VALUES ( $1, $2, $3, $4, $5, $6, $7)
+        ) VALUES ( $1, $2, $3, $4, $5)
          RETURNING *;
         `,
-        [
-          action_type,
-          action_status,
-          admin_id,
-          admin_email,
-          user_id,
-          user_email,
-          JSON.stringify(metadata),
-        ],
+        [action_type, action_status, admin_id, user_id, metadata],
       );
 
       if (!response)
@@ -64,34 +46,19 @@ export class LoggerService {
   }
   async logAuthAction(data: LoggerAuthDto) {
     try {
-      const {
-        action_type,
-        action_status,
-        user_email,
-        user_id,
-        role,
-        metadata,
-      } = data;
+      const { action_type, action_status, user_id, role, metadata } = data;
       const response = await this.db.query<AdminLog>(
         `
         INSERT INTO auth_logs (
             action_type,
             action_status,
             user_id,
-            user_email,
             role,
             metadata
-        ) VALUES ( $1, $2, $3, $4, $5, $6)
+        ) VALUES ( $1, $2, $3, $4, $5)
          RETURNING *;
         `,
-        [
-          action_type,
-          action_status,
-          user_id,
-          user_email,
-          role,
-          JSON.stringify(metadata),
-        ],
+        [action_type, action_status, user_id, role, JSON.stringify(metadata)],
       );
 
       if (!response)
