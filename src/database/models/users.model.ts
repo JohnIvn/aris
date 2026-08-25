@@ -7,7 +7,7 @@ export async function createUsers(client: Pool) {
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       avatar_url TEXT,
-      username TEXT,
+      username TEXT UNIQUE NOT NULL,
       firstname TEXT NOT NULL,
       middlename TEXT DEFAULT NULL,
       lastname TEXT NOT NULL,

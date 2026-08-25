@@ -8,6 +8,13 @@ export async function createEnumTypes(client: Pool) {
     END $$;
   `);
 
+  await client.query(
+    `DO $$ BEGIN
+      CREATE TYPE report_status AS ENUM ('draft', 'submitted', 'approved', 'rejected');
+    EXCEPTION WHEN duplicate_object THEN null;
+    END $$;`,
+  );
+
   await client.query(`
     DO $$ BEGIN
       CREATE TYPE auth_action AS ENUM ('signin', 'signup', 'signout');
