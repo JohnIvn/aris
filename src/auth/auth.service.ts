@@ -55,7 +55,7 @@ export class AuthService {
       }
 
       const safeUser = {
-        id: userData.id,
+        avatar_url: userData.avatar_url,
         username: userData.username,
         firstname: userData.firstname,
         middlename: userData.middlename,
@@ -89,7 +89,7 @@ export class AuthService {
         action_status: 'success',
         action_type: 'signin',
         role: userData.role,
-        user_id: safeUser.id,
+        user_id: sessionToken.id,
         metadata: {},
       });
 
@@ -137,7 +137,7 @@ export class AuthService {
       }
 
       const safeUser = {
-        id: user.id,
+        avatar_url: user.avatar_url,
         username: user.username,
         firstname: user.firstname,
         middlename: user.middlename,
@@ -171,7 +171,7 @@ export class AuthService {
         action_status: 'success',
         action_type: 'signin',
         role: sessionToken.role,
-        user_id: safeUser.id,
+        user_id: sessionToken.id,
         metadata: {},
       });
 
@@ -276,9 +276,15 @@ export class AuthService {
       const user = response.rows[0] as UserData;
 
       const safeUser = {
-        id: user.id,
+        avatar_url: user.avatar_url,
+        username: user.username,
+        firstname: user.firstname,
+        middlename: user.middlename,
+        lastname: user.middlename,
+        gender: user.gender,
+        birthday: user.birthday,
+        age: user.age,
         email: user.email,
-        role: user.role,
       };
 
       await this.loggerService.logAuthAction({
