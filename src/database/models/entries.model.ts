@@ -9,7 +9,7 @@ export default async function createReportEntries(client: Pool) {
         course TEXT,
         description TEXT,
         output_count INT DEFAULT 0,
-        status report_status DEFAULT 'draft',
+        status report_status DEFAULT 'pending',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )

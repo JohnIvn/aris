@@ -10,7 +10,7 @@ export async function createEnumTypes(client: Pool) {
 
   await client.query(
     `DO $$ BEGIN
-      CREATE TYPE report_status AS ENUM ('draft', 'submitted', 'approved', 'rejected');
+      CREATE TYPE report_status AS ENUM ('draft', 'submitted', 'approved', 'rejected', 'pending');
     EXCEPTION WHEN duplicate_object THEN null;
     END $$;`,
   );
