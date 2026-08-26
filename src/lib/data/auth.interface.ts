@@ -9,6 +9,7 @@ export interface UserData {
   firstname: string;
   middlename: string;
   lastname: string;
+  gender: string;
   birthday?: string;
   age?: number;
   role: UserRoles;

@@ -117,6 +117,7 @@ export class AuthService {
         firstname,
         lastname,
         middlename,
+        gender,
         password,
         username,
         avatar_url,
@@ -132,7 +133,6 @@ export class AuthService {
       if (!username) errors.push('Username is required');
       if (!firstname) errors.push('Firstname is required');
       if (!lastname) errors.push('Lastname is required');
-      if (!birthday) errors.push('Birthday is required');
 
       if (errors.length > 0) {
         await this.loggerService.logAuthAction({
@@ -161,6 +161,7 @@ export class AuthService {
           firstname,
           lastname,
           middlename,
+          gender,
           password_hash,
           username,
           avatar_url,
@@ -169,7 +170,7 @@ export class AuthService {
           provider,
           role
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *;
       `,
         [
@@ -177,6 +178,7 @@ export class AuthService {
           firstname,
           lastname,
           middlename,
+          gender,
           password_hash,
           username,
           avatar_url,

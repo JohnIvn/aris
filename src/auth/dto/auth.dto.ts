@@ -61,6 +61,12 @@ export class SignUpDto {
   @MaxLength(60)
   lastname!: string;
 
+  @IsString()
+  @IsOptional()
+  @MinLength(2)
+  @MaxLength(60)
+  gender?: string;
+
   @IsDateString()
   @IsOptional()
   birthday?: string;
