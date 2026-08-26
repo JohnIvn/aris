@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { FastifyReply } from 'fastify';
 import { LoggerService } from '../logger/logger.service';
 import { UserSession } from '../lib/data/interfaces';
-import { getUserByEmail } from '../lib/utils/helpers';
+import { getUserByEmail, getUserById } from '../lib/utils/helpers';
 
 @Injectable()
 export class AuthService {
@@ -37,6 +37,72 @@ export class AuthService {
     }
 
     return age;
+  }
+
+  async verifyUser(user: UserSession, reply: FastifyReply) {
+    try {
+      const userData = await getUserById(this.db, user.id);
+
+      if (!userData) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signin',
+          role: undefined,
+          user_id: undefined,
+          metadata: {},
+        });
+        return ErrorHandler('User Not Found', 404, userData);
+      }
+
+      const safeUser = {
+        id: userData.id,
+        username: userData.username,
+        firstname: userData.firstname,
+        middlename: userData.middlename,
+        lastname: userData.middlename,
+        gender: userData.gender,
+        birthday: userData.birthday,
+        age: userData.age,
+        email: userData.email,
+      };
+
+      const sessionToken = {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      };
+
+      const token = await this.jwtService.signAsync(sessionToken, {
+        secret: process.env.JWT_SECRET!,
+        expiresIn: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      reply.cookie('token', token, {
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      await this.loggerService.logAuthAction({
+        action_status: 'success',
+        action_type: 'signin',
+        role: userData.role,
+        user_id: safeUser.id,
+        metadata: {},
+      });
+
+      reply.send({
+        message: 'Successfully Signed In',
+        data: { user: safeUser, token },
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        return ErrorHandler(error.message, 500, error.name);
+      }
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
   }
 
   // SIGNIN
@@ -72,11 +138,23 @@ export class AuthService {
 
       const safeUser = {
         id: user.id,
+        username: user.username,
+        firstname: user.firstname,
+        middlename: user.middlename,
+        lastname: user.middlename,
+        gender: user.gender,
+        birthday: user.birthday,
+        age: user.age,
+        email: user.email,
+      };
+
+      const sessionToken = {
+        id: user.id,
         email: user.email,
         role: user.role,
       };
 
-      const token = await this.jwtService.signAsync(safeUser, {
+      const token = await this.jwtService.signAsync(sessionToken, {
         secret: process.env.JWT_SECRET!,
         expiresIn: 7 * 24 * 60 * 60 * 1000,
       });
@@ -92,7 +170,7 @@ export class AuthService {
       await this.loggerService.logAuthAction({
         action_status: 'success',
         action_type: 'signin',
-        role: safeUser.role,
+        role: sessionToken.role,
         user_id: safeUser.id,
         metadata: {},
       });

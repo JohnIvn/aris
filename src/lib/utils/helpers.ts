@@ -48,14 +48,19 @@ export async function getUserByEmail(
   }
 }
 
-export async function getUserById(client: Pool, id: string) {
+export async function getUserById(
+  client: Pool,
+  id: string,
+): Promise<UserData | undefined> {
   try {
-    return client.query(
+    const user = await client.query(
       `
             SELECT * FROM users
             WHERE id = $1`,
       [id],
     );
+
+    return user.rows[0] as UserData;
   } catch (error) {
     if (error instanceof Error) {
       ErrorHandler(error.message, 500, error);

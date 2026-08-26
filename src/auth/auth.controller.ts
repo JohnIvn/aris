@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto/auth.dto';
 import { type FastifyReply } from 'fastify';
@@ -8,6 +8,14 @@ import { type UserSession } from '../lib/data/interfaces';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('verify')
+  async verifyUser(
+    @CurrentUser() user: UserSession,
+    @Res() reply: FastifyReply,
+  ) {
+    return this.authService.verifyUser(user, reply);
+  }
 
   @Post('signin')
   async signIn(@Res() reply: FastifyReply, @Body() data: SignInDto) {
