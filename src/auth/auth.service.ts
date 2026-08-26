@@ -119,6 +119,7 @@ export class AuthService {
         middlename,
         gender,
         password,
+        confirm_password,
         username,
         avatar_url,
         birthday,
@@ -133,6 +134,8 @@ export class AuthService {
       if (!username) errors.push('Username is required');
       if (!firstname) errors.push('Firstname is required');
       if (!lastname) errors.push('Lastname is required');
+      if (password !== confirm_password)
+        errors.push('Password and Confirm Password does not match');
 
       if (errors.length > 0) {
         await this.loggerService.logAuthAction({
