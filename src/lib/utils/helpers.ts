@@ -34,7 +34,7 @@ export async function getUserByEmail(
     const user = await client.query(
       `
             SELECT * FROM users
-            WHERE email = $1 
+            WHERE email = $1
             LIMIT 1`,
       [email ?? null],
     );
@@ -56,8 +56,31 @@ export async function getUserById(
     const user = await client.query(
       `
             SELECT * FROM users
-            WHERE id = $1`,
+            WHERE id = $1
+            LIMIT 1`,
       [id],
+    );
+
+    return user.rows[0] as UserData;
+  } catch (error) {
+    if (error instanceof Error) {
+      ErrorHandler(error.message, 500, error);
+    }
+    ErrorHandler('Server Error', 500, 'Unknown Error');
+  }
+}
+
+export async function getUserByUsername(
+  client: Pool,
+  username: string,
+): Promise<UserData | undefined> {
+  try {
+    const user = await client.query(
+      `
+            SELECT * FROM users
+            WHERE username = $1
+            LIMIT 1`,
+      [username],
     );
 
     return user.rows[0] as UserData;

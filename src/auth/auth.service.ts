@@ -8,7 +8,11 @@ import { JwtService } from '@nestjs/jwt';
 import { FastifyReply } from 'fastify';
 import { LoggerService } from '../logger/logger.service';
 import { UserSession } from '../lib/data/interfaces';
-import { getUserByEmail, getUserById } from '../lib/utils/helpers';
+import {
+  getUserByEmail,
+  getUserById,
+  getUserByUsername,
+} from '../lib/utils/helpers';
 
 @Injectable()
 export class AuthService {
@@ -207,6 +211,44 @@ export class AuthService {
 
       const errors = [] as string[];
 
+      const emailExists = await getUserByEmail(this.db, email);
+      const usernameExists = await getUserByUsername(this.db, username);
+
+      if (emailExists) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signup',
+          role: undefined,
+          user_id: undefined,
+          metadata: {
+            email: email,
+            firstname: firstname,
+            middlename: middlename,
+            lastname: lastname,
+            birthday: birthday,
+            age: birthday ? this.getUserAge(birthday) : null,
+          },
+        });
+        return ErrorHandler('Email already in use', 409, errors);
+      }
+
+      if (usernameExists) {
+        await this.loggerService.logAuthAction({
+          action_status: 'failure',
+          action_type: 'signup',
+          role: undefined,
+          user_id: undefined,
+          metadata: {
+            email: email,
+            firstname: firstname,
+            middlename: middlename,
+            lastname: lastname,
+            birthday: birthday,
+            age: birthday ? this.getUserAge(birthday) : null,
+          },
+        });
+        return ErrorHandler('Username already in use', 409, errors);
+      }
       if (!email) errors.push('Email is required');
       if (!password) errors.push('Password is required');
       if (!username) errors.push('Username is required');
