@@ -11,6 +11,9 @@
 	},
 	{
 		"path": "../aris-web"
+	},
+	{
+		"path": "../aris-mobile"
 	}
 ],
   "settings": {}
