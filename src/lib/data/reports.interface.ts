@@ -1,3 +1,5 @@
+import { ArStatus } from './reports.types';
+
 export interface ReportData {
   id: string;
   user_id: string | null;
@@ -5,6 +7,10 @@ export interface ReportData {
   shift_hours: number;
   shift_start: string | null;
   shift_end: string | null;
+  status: ArStatus;
+  department_secretary_id: string | null;
+  hr_id: string | null;
+  accounting_id: string | null;
   created_at: string;
   updated_at: string;
 }

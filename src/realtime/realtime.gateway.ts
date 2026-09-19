@@ -7,17 +7,14 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Logger } from '@nestjs/common';
-import {
-  FingerprintDelete,
-  FingerprintRegister,
-} from '../lib/data/fingerprint.dto';
+import { Notification } from '../lib/data/notifications.interface';
 import { UserSession } from '../lib/data/interfaces';
 import { isSessionCookie, parseCookieHeader } from '../lib/utils/helpers';
 
 interface ServerToClientEvents {
-  'fingerprint:register': (payload: FingerprintRegister) => Promise<void>;
-  'fingerprint:delete': (payload: FingerprintDelete) => Promise<void>;
-  'fingerprint:verify': () => Promise<void>;
+  'notification:new': (payload: Notification) => void;
+  'notification:read': (payload: { notificationId: string }) => void;
+  'notification:deleted': (payload: { notificationId: string }) => void;
 }
 
 type ClientToServerEvents = Record<string, never>;
@@ -93,6 +90,25 @@ export class RealtimeGateway
       this.logger.log(`User ${session.id} disconnected (${client.id})`);
     }
   }
+
+  emitNewNotification(userId: string, notification: Notification) {
+    this.server
+      .to(this.userRoom(userId))
+      .emit('notification:new', notification);
+  }
+
+  emitNotificationRead(userId: string, notificationId: string) {
+    this.server
+      .to(this.userRoom(userId))
+      .emit('notification:read', { notificationId });
+  }
+
+  emitNotificationDeleted(userId: string, notificationId: string) {
+    this.server
+      .to(this.userRoom(userId))
+      .emit('notification:deleted', { notificationId });
+  }
+
   private extractSession(client: TypedSocket): UserSession | null {
     const rawCookie = client.handshake.headers.cookie;
     let token: string | undefined;

@@ -24,4 +24,5 @@ export const NOTIFICATION_TYPE = [
   'performance_reviewed',
   'performance_recorded',
 ] as const;
+
 export type NotificationType = (typeof NOTIFICATION_TYPE)[number];
