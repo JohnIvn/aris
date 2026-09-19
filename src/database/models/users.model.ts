@@ -6,6 +6,7 @@ export async function createUsers(client: Pool) {
 
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      employee_id TEXT UNIQUE NOT NULL,
       avatar_url TEXT,
       username TEXT UNIQUE NOT NULL,
       firstname TEXT NOT NULL,
@@ -16,7 +17,7 @@ export async function createUsers(client: Pool) {
       birthday DATE DEFAULT NULL,
       age INT DEFAULT NULL,
       gender TEXT DEFAULT NULL,
-      provider TEXT,
+      provider TEXT DEFAULT 'local',
       role member_role DEFAULT 'employee',
       failed_login_attempts INT NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW(),

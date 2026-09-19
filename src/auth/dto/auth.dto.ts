@@ -31,6 +31,9 @@ export class SignUpDto {
   id?: string;
 
   @IsString()
+  employee_id!: string;
+
+  @IsString()
   @IsOptional()
   avatar_url?: string;
 
