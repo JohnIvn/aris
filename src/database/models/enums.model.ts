@@ -48,4 +48,31 @@ export async function createEnumTypes(client: Pool) {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   `);
+
+  await client.query(`
+  DO $$ BEGIN
+    CREATE TYPE notification_type AS ENUM (
+      'ar_submitted',
+      'ar_updated',
+      'ar_status_changed',
+      'ar_rejected',
+      'ar_approved',
+      'ar_returned',
+      'ar_forwarded',
+      'ar_department_secretary',
+      'ar_hr',
+      'ar_accounting',
+      'payroll_updated',
+      'payroll_status_changed',
+      'payroll_ready',
+      'payroll_rejected',
+      'payroll_moved',
+      'performance_notification',
+      'performance_updated',
+      'performance_reviewed',
+      'performance_recorded'
+    );
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$;
+`);
 }
