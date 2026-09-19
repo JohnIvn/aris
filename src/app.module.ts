@@ -8,6 +8,9 @@ import { PayrollModule } from './payroll/payroll.module';
 import { DatabaseModule } from './database/database.module';
 import { LoggerModule } from './logger/logger.module';
 import { ReportsModule } from './reports/reports.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { MeetingsModule } from './meetings/meetings.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { ReportsModule } from './reports/reports.module';
     DatabaseModule,
     LoggerModule,
     ReportsModule,
+    AnalyticsModule,
+    MeetingsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
