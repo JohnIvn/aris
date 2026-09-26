@@ -290,7 +290,7 @@ export class AuthService {
       const table: RoleTable = USER_ROLE_TABLES[userRole];
       const employeeId = employee_id ?? username;
 
-      const response = await this.db.query(
+      const response = await this.db.query<UserData>(
         `
         INSERT INTO ${table} (
           email,
@@ -328,7 +328,10 @@ export class AuthService {
       if (response.rowCount === 0)
         return ErrorHandler('Error signing up, please try again later', 500);
 
-      const user = response.rows[0] as UserData;
+      const user = response.rows[0];
+      if (!user)
+        return ErrorHandler('Error signing up, please try again later', 500);
+
       user.role = userRole;
 
       const safeUser = {

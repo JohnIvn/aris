@@ -49,7 +49,7 @@ async function findUser(
       ? `SELECT *, '${role}'::text AS role FROM ${USER_ROLE_TABLES[role]}`
       : roleUnion();
 
-    const user = await client.query(
+    const user = await client.query<UserData>(
       `
             SELECT * FROM (
             ${union}
@@ -59,7 +59,7 @@ async function findUser(
       [value ?? null],
     );
 
-    return user.rows[0] as UserData | undefined;
+    return user.rows[0];
   } catch (error) {
     if (error instanceof Error) {
       ErrorHandler(error.message, 500, error);
