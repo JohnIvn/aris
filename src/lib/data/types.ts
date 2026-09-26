@@ -1,8 +1,18 @@
 export const ACCOUNT_PROVIDER = ['local', 'google'];
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[number];
 
-export const USER_ROLES = ['admin', 'user'];
+export const USER_ROLES = ['professor', 'staff', 'admin'];
 export type UserRoles = (typeof USER_ROLES)[number];
+
+export const USER_ROLE_TABLES = {
+  professor: 'user_professors',
+  staff: 'user_staffs',
+  admin: 'user_admins',
+} as const satisfies Record<UserRoles, string>;
+
+export function isUserRole(value: unknown): value is UserRoles {
+  return (USER_ROLES as readonly string[]).includes(value as string);
+}
 export const NOTIFICATION_TYPE = [
   'ar_submitted',
   'ar_updated',

@@ -26,12 +26,14 @@ export class SignInDto {
 }
 
 export class SignUpDto {
-  @IsUUID()
+  @IsString()
   @IsOptional()
+  @IsUUID()
   id?: string;
 
   @IsString()
-  employee_id!: string;
+  @IsOptional()
+  employee_id?: string;
 
   @IsString()
   @IsOptional()

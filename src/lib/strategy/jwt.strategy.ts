@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { UserSession } from '../data/interfaces';
 import { DatabaseService } from '../../database/database.service';
+import { USER_ROLE_TABLES } from '../data/types';
 
 const PassportJwtStrategy = Strategy as Type<unknown>;
 
@@ -62,11 +63,10 @@ export class JwtStrategy extends PassportStrategy(PassportJwtStrategy, 'jwt') {
     const client = this.databaseService.getClient();
     const result = await client.query<UserSession>(
       `
-        SELECT id as "id", email, role
-        FROM users
+        SELECT id as "id", email, $3::text as "role"
+        FROM ${USER_ROLE_TABLES[payload.role]}
         WHERE id = $1
           AND email = $2
-          AND role = $3
           AND is_banned = false
         LIMIT 1;
       `,

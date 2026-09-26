@@ -14,6 +14,14 @@ import {
   getUserByUsername,
 } from '../lib/utils/helpers';
 
+import {
+  USER_ROLE_TABLES,
+  isUserRole,
+  type UserRoles,
+} from '../lib/data/types';
+
+type RoleTable = (typeof USER_ROLE_TABLES)[keyof typeof USER_ROLE_TABLES];
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -196,6 +204,7 @@ export class AuthService {
     try {
       const {
         email,
+        employee_id,
         firstname,
         lastname,
         middlename,
@@ -277,10 +286,15 @@ export class AuthService {
 
       const password_hash = await argon2.hash(password);
 
+      const userRole: UserRoles = isUserRole(role) ? role : 'staff';
+      const table: RoleTable = USER_ROLE_TABLES[userRole];
+      const employeeId = employee_id ?? username;
+
       const response = await this.db.query(
         `
-        INSERT INTO users (
+        INSERT INTO ${table} (
           email,
+          employee_id,
           firstname,
           lastname,
           middlename,
@@ -290,14 +304,14 @@ export class AuthService {
           avatar_url,
           age,
           birthday,
-          provider,
-          role
+          provider
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *;
       `,
         [
           email,
+          employeeId,
           firstname,
           lastname,
           middlename,
@@ -305,10 +319,9 @@ export class AuthService {
           password_hash,
           username,
           avatar_url,
-          birthday && this.getUserAge(birthday),
+          birthday ? this.getUserAge(birthday) : null,
           birthday,
           provider ?? 'local',
-          role ?? 'employee',
         ],
       );
 
@@ -316,6 +329,7 @@ export class AuthService {
         return ErrorHandler('Error signing up, please try again later', 500);
 
       const user = response.rows[0] as UserData;
+      user.role = userRole;
 
       const safeUser = {
         avatar_url: user.avatar_url,

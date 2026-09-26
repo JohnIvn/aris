@@ -3,7 +3,9 @@ import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import { createEnumTypes } from './models/enums.model';
-import { createUsers } from './models/users.model';
+import { createUserProfessors } from './models/user_professor.model';
+import { createUserStaffs } from './models/user_staff.model';
+import { createUserAdmins } from './models/user_admin.model';
 import { createAuthLogs } from './models/auth_logs.model';
 import { createAdminLogs } from './models/admin_logs.model';
 
@@ -66,7 +68,9 @@ export class DatabaseService implements OnModuleInit {
       console.log(chalk.cyan('Creating tables...'));
 
       await createEnumTypes(this.pool);
-      await createUsers(this.pool);
+      await createUserProfessors(this.pool);
+      await createUserStaffs(this.pool);
+      await createUserAdmins(this.pool);
       await createAuthLogs(this.pool);
       await createAdminLogs(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));

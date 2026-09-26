@@ -9,6 +9,7 @@ import { ReportData } from '../lib/data/reports.interface';
 import { ArStage, ArStatus } from '../lib/data/reports.types';
 import { Payroll, PayrollStatus } from '../lib/data/payroll.interface';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { getUserById } from '../lib/utils/helpers';
 
 @Injectable()
 export class NotificationsService {
@@ -393,13 +394,9 @@ export class NotificationsService {
     payload: Partial<NotificationDto> & { title: string },
   ) {
     try {
-      const user = await this.db.query(
-        `SELECT * FROM users
-        WHERE id = $1`,
-        [userId],
-      );
+      const user = await getUserById(this.db, userId);
 
-      if (user.rowCount === 0) return ErrorHandler('User Not Found!', 404);
+      if (!user) return ErrorHandler('User Not Found!', 404);
 
       const notification = await this.createNotificationRecord(
         userId,
