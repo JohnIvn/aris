@@ -146,4 +146,37 @@ export async function createEnumTypes(client: Pool) {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE payroll_action AS ENUM (
+        'create_payroll',
+        'update_payroll',
+        'delete_payroll',
+        'email_payroll',
+        'sms_payroll'
+      );
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE meeting_status AS ENUM ('scheduled', 'in_progress', 'summarized', 'cancelled');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE meeting_action AS ENUM (
+        'create_meeting',
+        'update_meeting',
+        'delete_meeting',
+        'upload_transcript',
+        'summarize_meeting'
+      );
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
 }

@@ -10,6 +10,7 @@ import { createUserLogs } from './models/user_logs.model';
 import { createAdminLogs } from './models/admin_logs.model';
 import { createSessions } from './models/sessions.model';
 import createReports from './models/reports.model';
+import { createPayrollLogs } from './models/payroll_logs.model';
 import { createSystemSettings } from './models/system_settings.model';
 import { createLoginAttempts } from './models/login_attempts.model';
 import { createSubmissions } from './models/submissions.model';
@@ -20,6 +21,8 @@ import { createSystemLogs } from './models/system_logs.model';
 import { createSupportChannels } from './models/support_channels.model';
 import { createSupportTickets } from './models/support_tickets.model';
 import { createBackups } from './models/backups.model';
+import { createMeetingRecords } from './models/meeting_records.model';
+import { createMeetingLogs } from './models/meeting_logs.model';
 
 dotenv.config();
 
@@ -87,6 +90,7 @@ export class DatabaseService implements OnModuleInit {
       await createAdminLogs(this.pool);
       await createSessions(this.pool);
       await createReports(this.pool);
+      await createPayrollLogs(this.pool);
       await createSystemSettings(this.pool);
       await createLoginAttempts(this.pool);
       await createSubmissions(this.pool);
@@ -97,6 +101,8 @@ export class DatabaseService implements OnModuleInit {
       await createSupportChannels(this.pool);
       await createSupportTickets(this.pool);
       await createBackups(this.pool);
+      await createMeetingRecords(this.pool);
+      await createMeetingLogs(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {
       console.error(
