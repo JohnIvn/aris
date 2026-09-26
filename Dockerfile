@@ -1,8 +1,9 @@
 # ---------- Build stage ----------
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Install dependencies (dev included for build)
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
@@ -15,11 +16,12 @@ COPY src ./src
 RUN npm run build
 
 # ---------- Runtime stage ----------
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
 # Install production dependencies only
+RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
