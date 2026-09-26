@@ -1,7 +1,7 @@
 export const ACCOUNT_PROVIDER = ['local', 'google'];
 export type AccountProvider = (typeof ACCOUNT_PROVIDER)[number];
 
-export const USER_ROLES = ['professor', 'staff', 'admin'];
+export const USER_ROLES = ['professor', 'staff', 'admin'] as const;
 export type UserRoles = (typeof USER_ROLES)[number];
 
 export const USER_ROLE_TABLES = {
