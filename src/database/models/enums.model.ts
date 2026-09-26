@@ -179,4 +179,11 @@ export async function createEnumTypes(client: Pool) {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE restore_status AS ENUM ('success', 'failed', 'in_progress');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
 }
