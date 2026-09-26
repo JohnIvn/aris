@@ -36,6 +36,7 @@
     "@nestjs/websockets": "^11.1.28",
     "@supabase/supabase-js": "^2.112.2",
     "argon2": "^0.45.1",
+    "chalk": "^4.1.2",
     "class-transformer": "^0.5.1",
     "compression": "^1.8.1",
     "cookie": "^2.0.1",
