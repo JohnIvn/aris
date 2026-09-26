@@ -90,4 +90,60 @@ export async function createEnumTypes(client: Pool) {
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $$;
 `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE approval_status AS ENUM ('pending', 'approved', 'rejected', 'flagged', 'skipped');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE log_kind AS ENUM ('auth', 'security', 'alert');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE announcement_status AS ENUM ('draft', 'scheduled', 'sent', 'archived');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE ticket_status AS ENUM ('open', 'in_progress', 'resolved', 'closed');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE ticket_priority AS ENUM ('low', 'normal', 'high', 'urgent');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE support_channel_kind AS ENUM ('email', 'phone', 'chat', 'walk_in');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE backup_status AS ENUM ('verified', 'archived', 'failed', 'pending');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE backup_type AS ENUM ('automated_daily', 'manual_snapshot', 'weekly_full');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
 }

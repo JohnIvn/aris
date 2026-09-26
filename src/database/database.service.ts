@@ -9,6 +9,17 @@ import { createUserAdmins } from './models/user_admin.model';
 import { createUserLogs } from './models/user_logs.model';
 import { createAdminLogs } from './models/admin_logs.model';
 import { createSessions } from './models/sessions.model';
+import createReports from './models/reports.model';
+import { createSystemSettings } from './models/system_settings.model';
+import { createLoginAttempts } from './models/login_attempts.model';
+import { createSubmissions } from './models/submissions.model';
+import { createSubmissionAttachments } from './models/submission_attachments.model';
+import { createSubmissionApprovals } from './models/submission_approvals.model';
+import { createAnnouncements } from './models/announcements.model';
+import { createSystemLogs } from './models/system_logs.model';
+import { createSupportChannels } from './models/support_channels.model';
+import { createSupportTickets } from './models/support_tickets.model';
+import { createBackups } from './models/backups.model';
 
 dotenv.config();
 
@@ -75,6 +86,17 @@ export class DatabaseService implements OnModuleInit {
       await createUserLogs(this.pool);
       await createAdminLogs(this.pool);
       await createSessions(this.pool);
+      await createReports(this.pool);
+      await createSystemSettings(this.pool);
+      await createLoginAttempts(this.pool);
+      await createSubmissions(this.pool);
+      await createSubmissionAttachments(this.pool);
+      await createSubmissionApprovals(this.pool);
+      await createAnnouncements(this.pool);
+      await createSystemLogs(this.pool);
+      await createSupportChannels(this.pool);
+      await createSupportTickets(this.pool);
+      await createBackups(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {
       console.error(
