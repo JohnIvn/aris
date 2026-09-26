@@ -52,7 +52,10 @@ export class DatabaseService implements OnModuleInit {
       connectionString,
       ssl:
         process.env.NODE_ENV === 'production'
-          ? { rejectUnauthorized: true }
+          ? {
+              rejectUnauthorized:
+                process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false',
+            }
           : false,
       max: 10,
       idleTimeoutMillis: 30000,
