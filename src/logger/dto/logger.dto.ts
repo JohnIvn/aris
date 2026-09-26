@@ -6,13 +6,15 @@ import {
   type AdminAction,
   AUTH_ACTION,
   type AuthAction,
+  USER_ACTION,
+  type UserAction,
 } from '../../lib/data/logger.types';
 import { USER_ROLES, type UserRoles } from '../../lib/data/types';
 
 export class LoggerAuthDto {
   @IsEnum(AUTH_ACTION)
   @IsString()
-  action_type!: AuthAction;
+  auth_action!: AuthAction;
 
   @IsEnum(ACTION_STATUS)
   @IsString()
@@ -36,7 +38,13 @@ export class LoggerAuthDto {
 export class LoggerAdminDto {
   @IsEnum(ADMIN_ACTION)
   @IsString()
-  action_type!: AdminAction;
+  @IsOptional()
+  action_type?: AdminAction;
+
+  @IsEnum(AUTH_ACTION)
+  @IsString()
+  @IsOptional()
+  auth_action?: AuthAction;
 
   @IsEnum(ACTION_STATUS)
   @IsString()
@@ -48,7 +56,36 @@ export class LoggerAdminDto {
 
   @IsUUID()
   @IsString()
+  @IsOptional()
+  user_id?: string;
+
+  @IsJSON()
+  @IsOptional()
+  metadata?: Record<string, any>;
+}
+
+export class LoggerUserDto {
+  @IsEnum(USER_ACTION)
+  @IsString()
+  @IsOptional()
+  action_type?: UserAction;
+
+  @IsEnum(AUTH_ACTION)
+  @IsString()
+  @IsOptional()
+  auth_action?: AuthAction;
+
+  @IsEnum(ACTION_STATUS)
+  @IsString()
+  action_status!: ActionStatus;
+
+  @IsUUID()
+  @IsString()
   user_id!: string;
+
+  @IsEnum(USER_ROLES)
+  @IsString()
+  role!: UserRoles;
 
   @IsJSON()
   @IsOptional()

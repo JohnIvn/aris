@@ -58,7 +58,7 @@ export class AuthService {
       if (!userData) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signin',
+          auth_action: 'signin',
           role: undefined,
           user_id: undefined,
           metadata: {},
@@ -99,7 +99,7 @@ export class AuthService {
 
       await this.loggerService.logAuthAction({
         action_status: 'success',
-        action_type: 'signin',
+        auth_action: 'signin',
         role: userData.role,
         user_id: sessionToken.id,
         metadata: {},
@@ -127,7 +127,7 @@ export class AuthService {
       if (!user) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signin',
+          auth_action: 'signin',
           role: undefined,
           user_id: undefined,
           metadata: {},
@@ -140,7 +140,7 @@ export class AuthService {
       if (!verifyPassword) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signin',
+          auth_action: 'signin',
           role: user.role,
           user_id: user.id,
           metadata: {},
@@ -181,7 +181,7 @@ export class AuthService {
 
       await this.loggerService.logAuthAction({
         action_status: 'success',
-        action_type: 'signin',
+        auth_action: 'signin',
         role: sessionToken.role,
         user_id: sessionToken.id,
         metadata: {},
@@ -226,7 +226,7 @@ export class AuthService {
       if (emailExists) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signup',
+          auth_action: 'signup',
           role: undefined,
           user_id: undefined,
           metadata: {
@@ -244,7 +244,7 @@ export class AuthService {
       if (usernameExists) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signup',
+          auth_action: 'signup',
           role: undefined,
           user_id: undefined,
           metadata: {
@@ -269,7 +269,7 @@ export class AuthService {
       if (errors.length > 0) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signup',
+          auth_action: 'signup',
           role: undefined,
           user_id: undefined,
           metadata: {
@@ -345,7 +345,7 @@ export class AuthService {
 
       await this.loggerService.logAuthAction({
         action_status: 'success',
-        action_type: 'signup',
+        auth_action: 'signup',
         role: user.role,
         user_id: user.id,
         metadata: {
@@ -374,7 +374,7 @@ export class AuthService {
       if (!token) {
         await this.loggerService.logAuthAction({
           action_status: 'failure',
-          action_type: 'signout',
+          auth_action: 'signout',
           role: user.role,
           user_id: user.id,
           metadata: {
@@ -387,7 +387,7 @@ export class AuthService {
 
       await this.loggerService.logAuthAction({
         action_status: 'success',
-        action_type: 'signout',
+        auth_action: 'signout',
         role: user.role,
         user_id: user.id,
         metadata: {},

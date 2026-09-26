@@ -116,12 +116,12 @@ export class PayrollService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'create_payroll',
-          admin_id: user.id,
-          user_id: data.user_id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { target_user_id: data.user_id },
         });
         return ErrorHandler(
           'Failed to record payroll, please try again later',
@@ -153,12 +153,12 @@ export class PayrollService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'update_payroll',
-          admin_id: user.id,
-          user_id: id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { payroll_id: id },
         });
         return ErrorHandler(
           'Failed to update payroll, please try again later',
@@ -166,12 +166,12 @@ export class PayrollService {
         );
       }
 
-      await this.loggerService.logAdminAction({
+      await this.loggerService.logUserAction({
         action_status: 'success',
         action_type: 'update_payroll',
-        admin_id: user.id,
-        user_id: id,
-        metadata: {},
+        user_id: user.id,
+        role: user.role,
+        metadata: { payroll_id: id },
       });
 
       return SuccessHandler('Successfully Recorded Payroll', 200, { response });
@@ -195,12 +195,12 @@ export class PayrollService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'delete_payroll',
-          admin_id: user.id,
-          user_id: id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { payroll_id: id },
         });
         return ErrorHandler(
           'Failed to delete payroll, please try again later',
@@ -208,12 +208,12 @@ export class PayrollService {
         );
       }
 
-      await this.loggerService.logAdminAction({
+      await this.loggerService.logUserAction({
         action_status: 'success',
         action_type: 'delete_payroll',
-        admin_id: user.id,
-        user_id: id,
-        metadata: {},
+        user_id: user.id,
+        role: user.role,
+        metadata: { payroll_id: id },
       });
 
       return SuccessHandler('Successfully Recorded Payroll', 200, { response });

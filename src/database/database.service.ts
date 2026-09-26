@@ -6,7 +6,7 @@ import { createEnumTypes } from './models/enums.model';
 import { createUserProfessors } from './models/user_professor.model';
 import { createUserStaffs } from './models/user_staff.model';
 import { createUserAdmins } from './models/user_admin.model';
-import { createAuthLogs } from './models/auth_logs.model';
+import { createUserLogs } from './models/user_logs.model';
 import { createAdminLogs } from './models/admin_logs.model';
 
 dotenv.config();
@@ -71,7 +71,7 @@ export class DatabaseService implements OnModuleInit {
       await createUserProfessors(this.pool);
       await createUserStaffs(this.pool);
       await createUserAdmins(this.pool);
-      await createAuthLogs(this.pool);
+      await createUserLogs(this.pool);
       await createAdminLogs(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {

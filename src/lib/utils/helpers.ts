@@ -33,7 +33,8 @@ export function parseCookieHeader(header: string): Record<string, string> {
  */
 function roleUnion(): string {
   return USER_ROLES.map(
-    (role) => `SELECT *, '${role}'::text AS role FROM ${USER_ROLE_TABLES[role]}`,
+    (role) =>
+      `SELECT *, '${role}'::text AS role FROM ${USER_ROLE_TABLES[role]}`,
   ).join('\n            UNION ALL\n            ');
 }
 

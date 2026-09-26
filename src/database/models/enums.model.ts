@@ -32,18 +32,26 @@ export async function createEnumTypes(client: Pool) {
   await client.query(`
     DO $$ BEGIN
       CREATE TYPE admin_action AS ENUM (
-      'accept_ar',
-      'reject_ar',
-      'update_ar',
-      'delete_ar',
       'create_user',
       'update_user',
-      'delete_user', 
+      'delete_user'
+      );    
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$
+  `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE user_action AS ENUM (
+      'create_report',
+      'update_report',
+      'delete_report',
+      'create_report_entry',
+      'update_report_entry',
+      'delete_report_entry',
       'create_payroll',
       'update_payroll',
-      'delete_payroll',
-      'email_payroll',
-      'sms_payroll'
+      'delete_payroll'
       );    
       EXCEPTION WHEN duplicate_object THEN NULL;
       END $$

@@ -122,12 +122,12 @@ export class ReportsService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'create_report',
-          admin_id: user.id,
-          user_id: data.user_id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { target_user_id: data.user_id },
         });
         return ErrorHandler(
           'Failed to record report, please try again later',
@@ -160,12 +160,12 @@ export class ReportsService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'update_report',
-          admin_id: user.id,
-          user_id: id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { report_id: id },
         });
         return ErrorHandler(
           'Failed to update report, please try again later',
@@ -173,12 +173,12 @@ export class ReportsService {
         );
       }
 
-      await this.loggerService.logAdminAction({
+      await this.loggerService.logUserAction({
         action_status: 'success',
         action_type: 'update_report',
-        admin_id: user.id,
-        user_id: id,
-        metadata: {},
+        user_id: user.id,
+        role: user.role,
+        metadata: { report_id: id },
       });
 
       return SuccessHandler('Successfully Updated Report', 200, { response });
@@ -202,12 +202,12 @@ export class ReportsService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'delete_report',
-          admin_id: user.id,
-          user_id: id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { report_id: id },
         });
         return ErrorHandler(
           'Failed to delete report, please try again later',
@@ -215,12 +215,12 @@ export class ReportsService {
         );
       }
 
-      await this.loggerService.logAdminAction({
+      await this.loggerService.logUserAction({
         action_status: 'success',
         action_type: 'delete_report',
-        admin_id: user.id,
-        user_id: id,
-        metadata: {},
+        user_id: user.id,
+        role: user.role,
+        metadata: { report_id: id },
       });
 
       return SuccessHandler('Successfully Deleted Report', 200, { response });
@@ -335,12 +335,12 @@ export class ReportsService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'create_report_entry',
-          admin_id: user.id,
-          user_id: data.report_id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { report_id: data.report_id },
         });
         return ErrorHandler(
           'Failed to record report entry, please try again later',
@@ -376,12 +376,12 @@ export class ReportsService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'update_report_entry',
-          admin_id: user.id,
-          user_id: id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { report_entry_id: id },
         });
         return ErrorHandler(
           'Failed to update report entry, please try again later',
@@ -389,12 +389,12 @@ export class ReportsService {
         );
       }
 
-      await this.loggerService.logAdminAction({
+      await this.loggerService.logUserAction({
         action_status: 'success',
         action_type: 'update_report_entry',
-        admin_id: user.id,
-        user_id: id,
-        metadata: {},
+        user_id: user.id,
+        role: user.role,
+        metadata: { report_entry_id: id },
       });
 
       return SuccessHandler('Successfully Updated Report Entry', 200, {
@@ -420,12 +420,12 @@ export class ReportsService {
       );
 
       if (response.rowCount === 0) {
-        await this.loggerService.logAdminAction({
+        await this.loggerService.logUserAction({
           action_status: 'failure',
           action_type: 'delete_report_entry',
-          admin_id: user.id,
-          user_id: id,
-          metadata: {},
+          user_id: user.id,
+          role: user.role,
+          metadata: { report_entry_id: id },
         });
         return ErrorHandler(
           'Failed to delete report entry, please try again later',
@@ -433,12 +433,12 @@ export class ReportsService {
         );
       }
 
-      await this.loggerService.logAdminAction({
+      await this.loggerService.logUserAction({
         action_status: 'success',
         action_type: 'delete_report_entry',
-        admin_id: user.id,
-        user_id: id,
-        metadata: {},
+        user_id: user.id,
+        role: user.role,
+        metadata: { report_entry_id: id },
       });
 
       return SuccessHandler('Successfully Deleted Report Entry', 200, {
