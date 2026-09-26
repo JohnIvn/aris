@@ -17,6 +17,7 @@ import { createSubmissions } from './models/submissions.model';
 import { createSubmissionAttachments } from './models/submission_attachments.model';
 import { createApprovalStages } from './models/approval_stages.model';
 import { createSubmissionApprovals } from './models/submission_approvals.model';
+import { createSubmissionStatusHistory } from './models/submission_status_history.model';
 import { createAnnouncements } from './models/announcements.model';
 import { createSystemLogs } from './models/system_logs.model';
 import { createSupportChannels } from './models/support_channels.model';
@@ -99,6 +100,7 @@ export class DatabaseService implements OnModuleInit {
       await createSubmissionAttachments(this.pool);
       await createApprovalStages(this.pool);
       await createSubmissionApprovals(this.pool);
+      await createSubmissionStatusHistory(this.pool);
       await createAnnouncements(this.pool);
       await createSystemLogs(this.pool);
       await createSupportChannels(this.pool);

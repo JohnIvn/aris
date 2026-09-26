@@ -186,4 +186,20 @@ export async function createEnumTypes(client: Pool) {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   `);
+
+  await client.query(`
+    DO $$ BEGIN
+      CREATE TYPE submission_status AS ENUM (
+        'draft',
+        'submitted',
+        'pending',
+        'approved',
+        'disapproved',
+        'rejected',
+        'flagged',
+        'missing'
+      );
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
 }

@@ -9,7 +9,7 @@ export async function createSubmissions(client: Pool) {
       role user_role DEFAULT 'staff',
       reference TEXT UNIQUE,
       record_type TEXT,
-      status report_status DEFAULT 'submitted',
+      status submission_status DEFAULT 'submitted',
       topics TEXT,
       notes TEXT,
       due_at TIMESTAMP,
