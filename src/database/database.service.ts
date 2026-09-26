@@ -8,6 +8,7 @@ import { createUserStaffs } from './models/user_staff.model';
 import { createUserAdmins } from './models/user_admin.model';
 import { createUserLogs } from './models/user_logs.model';
 import { createAdminLogs } from './models/admin_logs.model';
+import { createSessions } from './models/sessions.model';
 
 dotenv.config();
 
@@ -73,6 +74,7 @@ export class DatabaseService implements OnModuleInit {
       await createUserAdmins(this.pool);
       await createUserLogs(this.pool);
       await createAdminLogs(this.pool);
+      await createSessions(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {
       console.error(
