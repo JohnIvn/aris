@@ -4,10 +4,15 @@ import { SignInDto, SignUpDto } from './dto/auth.dto';
 import { type FastifyReply } from 'fastify';
 import { CurrentUser } from '../lib/decorators/cookie-decorator';
 import { type UserSession } from '../lib/data/interfaces';
+import { OAuthService } from './oauth.service';
+import { GoogleSignInDto, GoogleSignUpDto } from './dto/oauth.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly oAuthService: OAuthService,
+  ) {}
 
   @Get('verify')
   async verifyUser(
@@ -34,5 +39,15 @@ export class AuthController {
     @Body() token: string,
   ) {
     return this.authService.signOut(user, reply, token);
+  }
+
+  @Post('google/mobile/signin')
+  googleSignIn(@Body() dto: GoogleSignInDto) {
+    return this.oAuthService.mobileGoogleSignIn(dto);
+  }
+
+  @Post('google/mobile/signup')
+  googleSignUp(@Body() dto: GoogleSignUpDto) {
+    return this.oAuthService.mobileGoogleSignUp(dto);
   }
 }
