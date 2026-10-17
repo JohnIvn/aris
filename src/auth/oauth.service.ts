@@ -83,17 +83,11 @@ export class OAuthService {
    */
   private async verifyGoogleToken(
     idToken: string,
-    platform: GoogleSignInDto['platform'],
   ): Promise<GoogleProfile | null> {
-    const audience =
-      platform === 'ios'
-        ? process.env.IOS_GOOGLE_CLIENT_ID
-        : process.env.ANDROID_GOOGLE_CLIENT_ID;
+    const audience = process.env.WEB_GOOGLE_CLIENT_ID;
 
     if (!audience) {
-      throw new Error(
-        `${platform.toUpperCase()}_GOOGLE_CLIENT_ID is not configured`,
-      );
+      throw new Error('WEB_GOOGLE_CLIENT_ID is not configured');
     }
 
     try {
@@ -127,7 +121,7 @@ export class OAuthService {
     try {
       const metadata = { provider: 'google', platform: dto.platform };
 
-      const profile = await this.verifyGoogleToken(dto.id_token, dto.platform);
+      const profile = await this.verifyGoogleToken(dto.id_token);
 
       if (!profile) {
         await this.loggerService.logAuthAction({
@@ -219,7 +213,7 @@ export class OAuthService {
   // SIGNUP
   async mobileGoogleSignUp(dto: GoogleSignUpDto) {
     try {
-      const profile = await this.verifyGoogleToken(dto.id_token, dto.platform);
+      const profile = await this.verifyGoogleToken(dto.id_token);
 
       if (!profile) {
         await this.loggerService.logAuthAction({
