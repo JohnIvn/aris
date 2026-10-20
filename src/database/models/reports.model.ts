@@ -7,7 +7,7 @@ export default async function createReports(client: Pool) {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL,
         employee_id TEXT UNIQUE NOT NULL,
-        shift_hours INT NOT NULL,
+        shift_hours NUMERIC(10, 2) NOT NULL,
         shift_start DATE,
         shift_end DATE,
         created_at TIMESTAMP DEFAULT NOW(),
