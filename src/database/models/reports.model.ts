@@ -10,6 +10,7 @@ export default async function createReports(client: Pool) {
         shift_hours NUMERIC(10, 2) NOT NULL,
         shift_start DATE,
         shift_end DATE,
+        approval_stage TEXT NOT NULL REFERENCES approval_stages(stage_key) ON DELETE CASCADE ON UPDATE CASCADE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
