@@ -163,7 +163,7 @@ export class AuthService {
             is_banned,
             'admin'::text AS role
           FROM user_admins
-          WHERE email = $1
+          WHERE LOWER(email) = $1
           LIMIT 1
         `,
           [email],
