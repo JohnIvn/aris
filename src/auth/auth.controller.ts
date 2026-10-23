@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Res, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto/auth.dto';
 import { type FastifyReply } from 'fastify';
@@ -6,6 +6,7 @@ import { CurrentUser } from '../lib/decorators/cookie-decorator';
 import { type UserSession } from '../lib/data/interfaces';
 import { OAuthService } from './oauth.service';
 import { GoogleSignInDto, GoogleSignUpDto } from './dto/oauth.dto';
+import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -15,6 +16,7 @@ export class AuthController {
   ) {}
 
   @Get('verify')
+  @UseGuards(JwtCookieGuard)
   async verifyUser(
     @CurrentUser() user: UserSession,
     @Res() reply: FastifyReply,
@@ -33,6 +35,7 @@ export class AuthController {
   }
 
   @Post('signout')
+  @UseGuards(JwtCookieGuard)
   async signOut(
     @CurrentUser() user: UserSession,
     @Res() reply: FastifyReply,

@@ -51,6 +51,39 @@ export class AuthService {
     return age;
   }
 
+  private toSafeUser(user: UserData) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: [user.firstname, user.lastname].filter(Boolean).join(' '),
+      role: user.role,
+      avatar_url: user.avatar_url,
+      username: user.username,
+      firstname: user.firstname,
+      middlename: user.middlename,
+      lastname: user.lastname,
+      gender: user.gender,
+      birthday: user.birthday,
+      age: user.age,
+    };
+  }
+
+  private async createToken(user: UserData) {
+    return this.jwtService.signAsync(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      {
+        secret: process.env.JWT_SECRET!,
+        issuer: 'aris-auth',
+        audience: 'aris-web',
+        expiresIn: '7d',
+      },
+    );
+  }
+
   async verifyUser(user: UserSession, reply: FastifyReply) {
     try {
       const userData = await getUserById(this.db, user.id);
@@ -66,28 +99,8 @@ export class AuthService {
         return ErrorHandler('User Not Found', 404, userData);
       }
 
-      const safeUser = {
-        avatar_url: userData.avatar_url,
-        username: userData.username,
-        firstname: userData.firstname,
-        middlename: userData.middlename,
-        lastname: userData.middlename,
-        gender: userData.gender,
-        birthday: userData.birthday,
-        age: userData.age,
-        email: userData.email,
-      };
-
-      const sessionToken = {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      };
-
-      const token = await this.jwtService.signAsync(sessionToken, {
-        secret: process.env.JWT_SECRET!,
-        expiresIn: 7 * 24 * 60 * 60 * 1000,
-      });
+      const safeUser = this.toSafeUser(userData);
+      const token = await this.createToken(userData);
 
       reply.cookie('token', token, {
         path: '/',
@@ -101,7 +114,7 @@ export class AuthService {
         action_status: 'success',
         auth_action: 'signin',
         role: userData.role,
-        user_id: sessionToken.id,
+        user_id: userData.id,
         metadata: {},
       });
 
@@ -120,7 +133,8 @@ export class AuthService {
   // SIGNIN
   async signIn(reply: FastifyReply, data: SignInDto) {
     try {
-      const { email, password } = data;
+      const { password } = data;
+      const email = data.email.trim().toLowerCase();
 
       const user = await getUserByEmail(this.db, email);
 
@@ -132,7 +146,11 @@ export class AuthService {
           user_id: undefined,
           metadata: {},
         });
-        return ErrorHandler('User Not Found', 404, user);
+        return ErrorHandler('Account does not exist', 404, null);
+      }
+
+      if (user.is_banned) {
+        return ErrorHandler('This account is banned', 403, null);
       }
 
       const verifyPassword = await argon2.verify(user.password_hash, password);
@@ -148,28 +166,8 @@ export class AuthService {
         return ErrorHandler('Incorrect Password', 406, []);
       }
 
-      const safeUser = {
-        avatar_url: user.avatar_url,
-        username: user.username,
-        firstname: user.firstname,
-        middlename: user.middlename,
-        lastname: user.middlename,
-        gender: user.gender,
-        birthday: user.birthday,
-        age: user.age,
-        email: user.email,
-      };
-
-      const sessionToken = {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      };
-
-      const token = await this.jwtService.signAsync(sessionToken, {
-        secret: process.env.JWT_SECRET!,
-        expiresIn: 7 * 24 * 60 * 60 * 1000,
-      });
+      const safeUser = this.toSafeUser(user);
+      const token = await this.createToken(user);
 
       reply.cookie('token', token, {
         path: '/',
@@ -182,8 +180,8 @@ export class AuthService {
       await this.loggerService.logAuthAction({
         action_status: 'success',
         auth_action: 'signin',
-        role: sessionToken.role,
-        user_id: sessionToken.id,
+        role: user.role,
+        user_id: user.id,
         metadata: {},
       });
 
