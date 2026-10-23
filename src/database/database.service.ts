@@ -59,7 +59,8 @@ export class DatabaseService implements OnModuleInit {
           : false,
       max: 10,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      statement_timeout: 10000,
     });
 
     this.pool.on('error', (error) => {

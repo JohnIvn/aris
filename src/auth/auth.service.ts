@@ -84,12 +84,21 @@ export class AuthService {
     );
   }
 
+  private recordAuthLog(data: Parameters<LoggerService['logAuthAction']>[0]) {
+    void this.loggerService.logAuthAction(data).catch((error: unknown) => {
+      console.error(
+        '[AUTH LOGGING ERROR]',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  }
+
   async verifyUser(user: UserSession, reply: FastifyReply) {
     try {
       const userData = await getUserById(this.db, user.id);
 
       if (!userData) {
-        await this.loggerService.logAuthAction({
+        this.recordAuthLog({
           action_status: 'failure',
           auth_action: 'signin',
           role: undefined,
@@ -110,7 +119,7 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      await this.loggerService.logAuthAction({
+      this.recordAuthLog({
         action_status: 'success',
         auth_action: 'signin',
         role: userData.role,
@@ -118,9 +127,9 @@ export class AuthService {
         metadata: {},
       });
 
-      reply.send({
-        message: 'Successfully Signed In',
-        data: { user: safeUser, token },
+      return SuccessHandler('Successfully Signed In', 200, {
+        user: safeUser,
+        token,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -136,10 +145,37 @@ export class AuthService {
       const { password } = data;
       const email = data.email.trim().toLowerCase();
 
-      const user = await getUserByEmail(this.db, email);
+      let user = (
+        await this.db.query<UserData>(
+          `
+          SELECT
+            id,
+            email,
+            password_hash,
+            username,
+            firstname,
+            middlename,
+            lastname,
+            avatar_url,
+            birthday,
+            age,
+            gender,
+            is_banned,
+            'admin'::text AS role
+          FROM user_admins
+          WHERE email = $1
+          LIMIT 1
+        `,
+          [email],
+        )
+      ).rows[0];
 
       if (!user) {
-        await this.loggerService.logAuthAction({
+        user = (await getUserByEmail(this.db, email)) as UserData;
+      }
+
+      if (!user) {
+        this.recordAuthLog({
           action_status: 'failure',
           auth_action: 'signin',
           role: undefined,
@@ -153,10 +189,14 @@ export class AuthService {
         return ErrorHandler('This account is banned', 403, null);
       }
 
+      if (!user.password_hash) {
+        return ErrorHandler('Account password is not configured', 500, null);
+      }
+
       const verifyPassword = await argon2.verify(user.password_hash, password);
 
       if (!verifyPassword) {
-        await this.loggerService.logAuthAction({
+        this.recordAuthLog({
           action_status: 'failure',
           auth_action: 'signin',
           role: user.role,
@@ -177,7 +217,7 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      await this.loggerService.logAuthAction({
+      this.recordAuthLog({
         action_status: 'success',
         auth_action: 'signin',
         role: user.role,
@@ -185,9 +225,9 @@ export class AuthService {
         metadata: {},
       });
 
-      reply.send({
-        message: 'Successfully Signed In',
-        data: { user: safeUser, token },
+      return SuccessHandler('Successfully Signed In', 200, {
+        user: safeUser,
+        token,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -334,7 +374,7 @@ export class AuthService {
         username: user.username,
         firstname: user.firstname,
         middlename: user.middlename,
-        lastname: user.middlename,
+        lastname: user.lastname,
         gender: user.gender,
         birthday: user.birthday,
         age: user.age,
@@ -367,30 +407,26 @@ export class AuthService {
     }
   }
 
-  async signOut(user: UserSession, reply: FastifyReply, token: string) {
+  async signOut(user: UserSession, reply: FastifyReply, token?: string) {
     try {
-      if (!token) {
-        await this.loggerService.logAuthAction({
-          action_status: 'failure',
-          auth_action: 'signout',
-          role: user.role,
-          user_id: user.id,
-          metadata: {
-            reason: 'Token does not exist',
-            code: 400,
-          },
-        });
-        return ErrorHandler('Error signing out, already signed out', 403, []);
-      }
+      reply.clearCookie('token', {
+        path: '/',
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+      });
 
       await this.loggerService.logAuthAction({
         action_status: 'success',
         auth_action: 'signout',
         role: user.role,
         user_id: user.id,
-        metadata: {},
+        metadata: {
+          token: token ?? null,
+        },
       });
-      reply.clearCookie(token);
+
+      return SuccessHandler('Successfully Signed Out', 200, null);
     } catch (error) {
       if (error instanceof Error) {
         return ErrorHandler(error.message, 500, error.name);

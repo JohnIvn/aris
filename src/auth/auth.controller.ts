@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignInDto, SignUpDto } from './dto/auth.dto';
 import { type FastifyReply } from 'fastify';
@@ -19,13 +28,17 @@ export class AuthController {
   @UseGuards(JwtCookieGuard)
   async verifyUser(
     @CurrentUser() user: UserSession,
-    @Res() reply: FastifyReply,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     return this.authService.verifyUser(user, reply);
   }
 
   @Post('signin')
-  async signIn(@Res() reply: FastifyReply, @Body() data: SignInDto) {
+  @HttpCode(HttpStatus.OK)
+  async signIn(
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Body() data: SignInDto,
+  ) {
     return this.authService.signIn(reply, data);
   }
 
@@ -35,11 +48,12 @@ export class AuthController {
   }
 
   @Post('signout')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtCookieGuard)
   async signOut(
     @CurrentUser() user: UserSession,
-    @Res() reply: FastifyReply,
-    @Body() token: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Body('token') token?: string,
   ) {
     return this.authService.signOut(user, reply, token);
   }
