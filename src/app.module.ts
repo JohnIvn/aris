@@ -11,6 +11,7 @@ import { ReportsModule } from './reports/reports.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ProfessorsModule } from './professors/professors.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     AnalyticsModule,
     MeetingsModule,
     NotificationsModule,
+    ProfessorsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
