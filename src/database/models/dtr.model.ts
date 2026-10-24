@@ -4,9 +4,9 @@ export default async function createDtrModel(client: Pool) {
   await client.query(
     `
         CREATE TABLE IF NOT EXISTS dtr (
-        id UUID PRIMARY KEY DEFAULT gen_uuid(),
-        professor_id UUID REFERENCES user_professor(id) ON DELETE CASCADE,
-        staff_id UUID REFERENCES user_staff(id) ON DELETE CASCADE,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        professor_id UUID REFERENCES user_professors(id) ON DELETE CASCADE,
+        staff_id UUID REFERENCES user_staffs(id) ON DELETE CASCADE,
         time_in TIME DEFAULT null,
         time_out TIME DEFAULT null,
         total_hours INT DEFAULT 0,
