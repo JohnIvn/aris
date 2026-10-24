@@ -16,6 +16,8 @@ import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { ReportData, ReportEntryData } from '../lib/data/reports.interface';
 import { UserSession } from '../lib/data/interfaces';
 import { LoggerService } from '../logger/logger.service';
+import { getUserById } from '../lib/utils/helpers';
+import { Dtr } from '../lib/data/dtr.interface';
 
 @Injectable()
 export class ReportsService {
@@ -458,26 +460,199 @@ export class ReportsService {
     limit: number,
   ) {
     try {
-      const response = await this.db.query<ReportData>(
-        `SELECT * FROM accomplishment_reports
-        WHERE user_id = $1
-        OFFSET $2 LIMIT $3`,
-        [user.id, offset ?? 0, limit ?? 20],
-      );
+      const user_data = await getUserById(this.db, user.id);
 
-      if (response.rowCount === 0) {
-        return ErrorHandler(
-          'Failed to fetch reports, please try again later',
-          500,
-        );
+      if (!user_data) {
+        return ErrorHandler('Failed to fetch user data', 404);
       }
 
-      return SuccessHandler('Successfully Fetched Reports', 200, { response });
+      const report_response = await this.db.query<ReportData>(
+        `
+      SELECT *
+      FROM accomplishment_reports
+      WHERE user_id = $1
+      ORDER BY updated_at DESC
+      LIMIT $2 OFFSET $3
+      `,
+        [user.id, limit ?? 5, offset ?? 0],
+      );
+
+      const reports = report_response.rows;
+
+      const formatted = await Promise.all(
+        reports.map(async (report) => {
+          const periodStart = new Date(report.period_start);
+          const periodEnd = new Date(report.period_end);
+
+          const periodLabel =
+            `${periodStart.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ` +
+            `${periodStart.getUTCDate().toString().padStart(2, '0')} - ` +
+            `${periodEnd.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ` +
+            `${periodEnd.getUTCDate().toString().padStart(2, '0')}`;
+
+          const [arTally, dtrTally] = await Promise.all([
+            this.calculateARTally(report.entries ?? []),
+            this.calculateDTRTally(
+              user.id,
+              report.period_start,
+              report.period_end,
+            ),
+          ]);
+
+          return {
+            id: report.id,
+            periodLabel,
+            stage: report.approval_stage,
+            updatedAt: report.updated_at,
+            rejectionRemarks: 'TODO',
+            professorName: [
+              user_data.firstname,
+              user_data.middlename,
+              user_data.lastname,
+            ]
+              .filter(Boolean)
+              .join(' '),
+            professorId: user_data.employee_id,
+            department: user_data.department,
+            position: user_data.position,
+            faculty_no: user_data.faculty_no,
+            arTally,
+            dtrTally,
+          };
+        }),
+      );
+
+      return SuccessHandler('Successfully Fetched Reports', 200, {
+        reports: formatted,
+        total: formatted.length,
+        offset: offset ?? 0,
+        limit: limit ?? 5,
+      });
     } catch (error) {
       if (error instanceof Error) {
         return ErrorHandler(error.message, 500, error.name);
       }
+
       return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
+  }
+  private async calculateARTally(ar_entries: ReportEntryData[]) {
+    try {
+      const entries: ReportEntryData[] = [];
+
+      for (const eid of ar_entries) {
+        const response = await this.db.query(
+          `
+        SELECT *
+        FROM report_entries
+        WHERE id = $1
+        `,
+          [eid],
+        );
+
+        if (response.rowCount === 0) {
+          continue;
+        }
+
+        entries.push(response.rows[0] as ReportEntryData);
+      }
+
+      const total_hours = this.calculateARHrTally(entries);
+
+      return {
+        entries,
+        total: entries.length,
+        total_hours,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        return ErrorHandler(error.message, 500, error.name);
+      }
+
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  private async calculateDTRTally(
+    user_id: string,
+    periodStart: string,
+    periodEnd: string,
+  ) {
+    try {
+      const periodStartDate = new Date(periodStart);
+      const periodEndDate = new Date(periodEnd);
+
+      const response = await this.db.query(
+        `SELECT * FROM dtr
+        WHERE shift_date IN [$1, $2] AND (professor_id = $3 OR staff_id = $3)`,
+        [periodStartDate, periodEndDate, user_id],
+      );
+
+      const dtrs = response.rows as Dtr[];
+
+      if (!dtrs) {
+        return ErrorHandler('No DTR Found in that date period', 404);
+      }
+
+      const totalHrs = this.calculateDtrHrTally(dtrs);
+
+      return totalHrs;
+    } catch (error) {
+      if (error instanceof Error) {
+        return ErrorHandler(error.message, 500, error.name);
+      }
+
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  private calculateARHrTally(entries: ReportEntryData[]): number {
+    let totalMinutes = 0;
+
+    for (const entry of entries) {
+      const [startHours, startMinutes] = entry.shift_start
+        .split(':')
+        .map(Number);
+
+      const [endHours, endMinutes] = entry.shift_end.split(':').map(Number);
+
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+
+      let duration = endTotalMinutes - startTotalMinutes;
+
+      // Support overnight shifts, e.g. 10 PM to 6 AM.
+      if (duration < 0) {
+        duration += 24 * 60;
+      }
+
+      totalMinutes += duration;
+    }
+
+    return Number((totalMinutes / 60).toFixed(2));
+  }
+
+  private calculateDtrHrTally(dtrs: Dtr[]): number {
+    let totalMinutes = 0;
+
+    for (const dtr of dtrs) {
+      const [startHours, startMinutes] = dtr.time_in.split(':').map(Number);
+
+      const [endHours, endMinutes] = dtr.time_out.split(':').map(Number);
+
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+
+      let duration = endTotalMinutes - startTotalMinutes;
+
+      // Support overnight shifts, e.g. 10 PM to 6 AM.
+      if (duration < 0) {
+        duration += 24 * 60;
+      }
+
+      totalMinutes += duration;
+    }
+
+    return Number((totalMinutes / 60).toFixed(2));
   }
 }
