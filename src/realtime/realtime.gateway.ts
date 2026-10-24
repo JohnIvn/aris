@@ -67,7 +67,6 @@ export class RealtimeGateway
       const session = this.extractSession(client);
 
       if (!session) {
-        this.logger.warn(`Rejected socket ${client.id} — no valid session`);
         client.disconnect();
         return;
       }

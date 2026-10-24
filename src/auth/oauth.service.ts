@@ -97,9 +97,6 @@ export class OAuthService {
       const payload = ticket.getPayload();
 
       if (!payload?.email || !payload.email_verified) {
-        this.logger.warn(
-          `Google token has no email or email is unverified (email: ${payload?.email ?? 'none'}, verified: ${String(payload?.email_verified)})`,
-        );
         return null;
       }
 
@@ -114,10 +111,7 @@ export class OAuthService {
         lastname: payload.family_name ?? '',
         avatar_url: payload.picture ?? null,
       };
-    } catch (error) {
-      this.logger.warn(
-        `Google token verification failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
       return null;
     }
   }
