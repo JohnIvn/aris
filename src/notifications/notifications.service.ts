@@ -107,7 +107,7 @@ export class NotificationsService {
   }
 
   private getArLabel(ar: ReportData): string {
-    const date = ar.shift_start ?? ar.created_at;
+    const date = ar.period_start ?? ar.created_at;
     return `Accomplishment Report — ${new Date(date).toLocaleDateString(
       'en-PH',
       {

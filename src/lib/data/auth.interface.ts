@@ -14,6 +14,9 @@ export interface UserData {
   birthday?: string;
   age?: number;
   role: UserRoles;
+  department: string;
+  position: string;
+  faculty_no: string;
   provider: AccountProvider;
   is_banned: boolean;
   failed_login_attempts: number;

@@ -10,3 +10,5 @@ export type ArStatus =
   | 'returned';
 
 export type ArStage = 'department_secretary' | 'hr' | 'accounting';
+
+export type Campus = 'south' | 'congress' | 'camarin' | 'bagong silang';
