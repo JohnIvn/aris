@@ -1,7 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { OAuth2Client } from 'google-auth-library';
 import { LoggerService } from '../logger/logger.service';
@@ -35,6 +32,7 @@ const USER_COLUMNS = `id, employee_id, username, firstname, middlename, lastname
 
 @Injectable()
 export class OAuthService {
+  private readonly logger = new Logger(OAuthService.name);
   private readonly googleClient = new OAuth2Client();
 
   constructor(
@@ -98,7 +96,12 @@ export class OAuthService {
 
       const payload = ticket.getPayload();
 
-      if (!payload?.email || !payload.email_verified) return null;
+      if (!payload?.email || !payload.email_verified) {
+        this.logger.warn(
+          `Google token has no email or email is unverified (email: ${payload?.email ?? 'none'}, verified: ${String(payload?.email_verified)})`,
+        );
+        return null;
+      }
 
       const email = payload.email.toLowerCase();
 
@@ -111,7 +114,10 @@ export class OAuthService {
         lastname: payload.family_name ?? '',
         avatar_url: payload.picture ?? null,
       };
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `Google token verification failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return null;
     }
   }
