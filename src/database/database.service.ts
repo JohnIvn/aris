@@ -26,6 +26,7 @@ import { createBackups } from './models/backups.model';
 import { createRestoreLogs } from './models/restore_logs.model';
 import { createMeetingRecords } from './models/meeting_records.model';
 import { createMeetingLogs } from './models/meeting_logs.model';
+import createReportEntries from './models/entries.model';
 
 dotenv.config();
 
@@ -97,6 +98,7 @@ export class DatabaseService implements OnModuleInit {
       await createAdminLogs(this.pool);
       await createSessions(this.pool);
       await createReports(this.pool);
+      await createReportEntries(this.pool);
       await createPayrollLogs(this.pool);
       await createSystemSettings(this.pool);
       await createLoginAttempts(this.pool);

@@ -451,4 +451,33 @@ export class ReportsService {
       return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
+
+  async fetchReportsForMobile(
+    user: UserSession,
+    offset: number,
+    limit: number,
+  ) {
+    try {
+      const response = await this.db.query<ReportData>(
+        `SELECT * FROM accomplishment_reports
+        WHERE user_id = $1
+        OFFSET $2 LIMIT $3`,
+        [user.id, offset ?? 0, limit ?? 20],
+      );
+
+      if (response.rowCount === 0) {
+        return ErrorHandler(
+          'Failed to fetch reports, please try again later',
+          500,
+        );
+      }
+
+      return SuccessHandler('Successfully Fetched Reports', 200, { response });
+    } catch (error) {
+      if (error instanceof Error) {
+        return ErrorHandler(error.message, 500, error.name);
+      }
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
 }
