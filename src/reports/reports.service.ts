@@ -516,6 +516,7 @@ export class ReportsService {
             department: user_data.department,
             position: user_data.position,
             faculty_no: user_data.faculty_no,
+            remarks: report.remarks,
             arTally,
             dtrTally,
           };
@@ -524,9 +525,6 @@ export class ReportsService {
 
       return SuccessHandler('Successfully Fetched Reports', 200, {
         reports: formatted,
-        total: formatted.length,
-        offset: offset ?? 0,
-        limit: limit ?? 5,
       });
     } catch (error) {
       if (error instanceof Error) {

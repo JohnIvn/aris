@@ -9,6 +9,7 @@ export interface ReportData {
   period_end: string;
   approval_stage: ArStatus;
   entries: ReportEntryData[];
+  remarks: string;
   department_secretary_id: string | null;
   hr_id: string | null;
   accounting_id: string | null;
