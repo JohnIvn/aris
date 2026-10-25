@@ -145,6 +145,8 @@ export class AuthService {
       const { password } = data;
       const email = data.email.trim().toLowerCase();
 
+      console.log(data);
+
       let user = (
         await this.db.query<UserData>(
           `

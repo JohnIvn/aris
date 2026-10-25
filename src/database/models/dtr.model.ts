@@ -9,7 +9,7 @@ export default async function createDtrModel(client: Pool) {
         staff_id UUID REFERENCES user_staffs(id) ON DELETE CASCADE,
         time_in TIME DEFAULT null,
         time_out TIME DEFAULT null,
-        total_hours INT DEFAULT 0,
+        total_hours NUMERIC(10, 2) DEFAULT 0,
         shift_date DATE NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
