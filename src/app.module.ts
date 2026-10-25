@@ -17,6 +17,7 @@ import { AuditModule } from './audit/audit.module';
 import { StaffModule } from './staff/staff.module';
 import { SystemMonitoringModule } from './system-monitoring/system-monitoring.module';
 import { DatabaseManagementModule } from './database-management/database-management.module';
+import { UserSettingsModule } from './user-settings/user-settings.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { DatabaseManagementModule } from './database-management/database-managem
     StaffModule,
     SystemMonitoringModule,
     DatabaseManagementModule,
+    UserSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

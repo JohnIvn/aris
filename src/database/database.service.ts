@@ -28,6 +28,7 @@ import { createMeetingRecords } from './models/meeting_records.model';
 import { createMeetingLogs } from './models/meeting_logs.model';
 import createReportEntries from './models/entries.model';
 import createDtrModel from './models/dtr.model';
+import { createUserPreferences } from './models/user_preferences.model';
 import { createHardwareEvents } from './models/hardware_events.model';
 import { createSoftwareMonitoring } from './models/software_monitoring.model';
 
@@ -121,6 +122,12 @@ export class DatabaseService implements OnModuleInit {
       await createHardwareEvents(this.pool);
       await createSoftwareMonitoring(this.pool);
       await createDtrModel(this.pool);
+      await createUserPreferences(this.pool);
+      await this.pool.query(`
+        ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE user_staffs ADD COLUMN IF NOT EXISTS phone TEXT;
+      `);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {
       console.error(
