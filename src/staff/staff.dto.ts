@@ -1,11 +1,13 @@
 import {
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { ACCOUNT_PROVIDER } from '../lib/data/types';
 
 export class CreateStaffDto {
   @IsString()
@@ -38,6 +40,10 @@ export class CreateStaffDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @IsEnum(ACCOUNT_PROVIDER)
+  @IsOptional()
+  provider?: (typeof ACCOUNT_PROVIDER)[number];
 
   @IsString()
   @IsOptional()

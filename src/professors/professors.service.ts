@@ -32,8 +32,8 @@ export class ProfessorsService {
       const result = await this.databaseService.getClient().query(
         `INSERT INTO user_professors
           (employee_id, username, firstname, middlename, lastname, email, password_hash,
-           position, department, is_banned)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           position, department, provider, is_banned)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING id, employee_id, username, firstname, middlename, lastname, email,
                    avatar_url, birthday, age, gender, position, department, provider,
                    is_banned, created_at, updated_at`,
@@ -47,6 +47,7 @@ export class ProfessorsService {
           passwordHash,
           data.position?.trim() || null,
           data.department?.trim() || null,
+          data.provider ?? 'local',
           data.active === false,
         ],
       );
