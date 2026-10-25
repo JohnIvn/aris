@@ -39,7 +39,6 @@ export class ReportsController {
   ) {
     return this.reportsService.fetchReportsForMobile(user, offset, limit);
   }
-
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchReports(

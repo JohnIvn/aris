@@ -514,7 +514,7 @@ export class ReportsService {
             professorId: user_data.employee_id,
             department: user_data.department,
             position: user_data.position,
-            faculty_no: user_data.faculty_no,
+            faculty_no: report.faculty_no,
             remarks: report.remarks,
             arTally,
             dtrTally,
@@ -580,8 +580,10 @@ export class ReportsService {
       const periodEndDate = new Date(periodEnd);
 
       const response = await this.db.query(
-        `SELECT * FROM dtr
-        WHERE shift_date IN [$1, $2] AND (professor_id = $3 OR staff_id = $3)`,
+        `SELECT *
+        FROM dtr
+        WHERE shift_date BETWEEN $1 AND $2
+        AND (professor_id = $3 OR staff_id = $3)`,
         [periodStartDate, periodEndDate, user_id],
       );
 
@@ -630,25 +632,23 @@ export class ReportsService {
   }
 
   private calculateDtrHrTally(dtrs: Dtr[]): number {
-    let totalMinutes = 0;
-
-    for (const dtr of dtrs) {
+    const totalMinutes = dtrs.reduce((total, dtr) => {
       const [startHours, startMinutes] = dtr.time_in.split(':').map(Number);
 
       const [endHours, endMinutes] = dtr.time_out.split(':').map(Number);
 
-      const startTotalMinutes = startHours * 60 + startMinutes;
-      const endTotalMinutes = endHours * 60 + endMinutes;
+      const start = startHours * 60 + startMinutes;
+      const end = endHours * 60 + endMinutes;
 
-      let duration = endTotalMinutes - startTotalMinutes;
+      let duration = end - start;
 
-      // Support overnight shifts, e.g. 10 PM to 6 AM.
+      // Support overnight shifts.
       if (duration < 0) {
         duration += 24 * 60;
       }
 
-      totalMinutes += duration;
-    }
+      return total + duration;
+    }, 0);
 
     return Number((totalMinutes / 60).toFixed(2));
   }

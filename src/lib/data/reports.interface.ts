@@ -4,7 +4,7 @@ export interface ReportData {
   id: string;
   user_id: string | null;
   employee_id: number | null;
-  faculty_id: string;
+  faculty_no: string;
   period_start: string;
   period_end: string;
   approval_stage: ArStatus;
