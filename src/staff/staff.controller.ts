@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 import { CreateStaffDto, UpdateStaffStatusDto } from './staff.dto';
 import { StaffService } from './staff.service';
@@ -24,5 +24,10 @@ export class StaffController {
     @Body() data: UpdateStaffStatusDto,
   ) {
     return this.staffService.updateStatus(id, data.active);
+  }
+
+  @Delete(':id')
+  deleteStaff(@Param('id') id: string) {
+    return this.staffService.deleteStaff(id);
   }
 }

@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  ValidateIf,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -37,13 +38,18 @@ export class CreateProfessorDto {
   @IsEmail()
   email!: string;
 
+  @ValidateIf((data) => data.provider !== 'google')
   @IsString()
   @MinLength(8)
-  password!: string;
+  password?: string;
 
   @IsEnum(ACCOUNT_PROVIDER)
   @IsOptional()
   provider?: (typeof ACCOUNT_PROVIDER)[number];
+
+  @IsString()
+  @IsOptional()
+  oauth_id_token?: string;
 
   @IsString()
   @IsOptional()

@@ -33,5 +33,20 @@ export async function createUserLogs(client: Pool) {
 
         CREATE INDEX IF NOT EXISTS idx_user_logs_auth_action
         ON user_logs (auth_action);
+
+        DO $$ BEGIN
+          ALTER TABLE user_logs
+            DROP CONSTRAINT IF EXISTS user_logs_subject_matches_role;
+          ALTER TABLE user_logs
+            ADD CONSTRAINT user_logs_subject_matches_role CHECK (
+              (role = 'staff' AND staff_id IS NOT NULL AND professor_id IS NULL)
+              OR (role = 'professor' AND professor_id IS NOT NULL AND staff_id IS NULL)
+              OR (role IN ('staff', 'professor') AND user_id IS NOT NULL
+                  AND staff_id IS NULL AND professor_id IS NULL)
+              OR (role = 'admin' AND staff_id IS NULL AND professor_id IS NULL)
+              OR (user_id IS NULL AND staff_id IS NULL AND professor_id IS NULL)
+            );
+        EXCEPTION WHEN undefined_table THEN NULL;
+        END $$;
         `);
 }

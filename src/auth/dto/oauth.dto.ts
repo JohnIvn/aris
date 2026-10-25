@@ -11,8 +11,8 @@ export class GoogleSignInDto {
   @IsNotEmpty()
   id_token!: string;
 
-  @IsIn(['android', 'ios', 'desktop'])
-  platform!: 'android' | 'ios' | 'desktop';
+  @IsIn(['android', 'ios', 'desktop', 'web'])
+  platform!: 'android' | 'ios' | 'desktop' | 'web';
 }
 
 export class GoogleSignUpDto extends GoogleSignInDto {

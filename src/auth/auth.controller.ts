@@ -63,6 +63,20 @@ export class AuthController {
     return this.oAuthService.mobileGoogleSignIn(dto);
   }
 
+  @Post('google/profile')
+  @UseGuards(JwtCookieGuard)
+  async googleProfile(@Body() dto: GoogleSignInDto) {
+    const profile = await this.oAuthService.verifyGoogleToken(dto.id_token);
+    if (!profile) {
+      return {
+        ok: false,
+        statusCode: 401,
+        message: 'Invalid Google token',
+      };
+    }
+    return { ok: true, data: profile };
+  }
+
   @Post('google/mobile/signup')
   googleSignUp(@Body() dto: GoogleSignUpDto) {
     return this.oAuthService.mobileGoogleSignUp(dto);
