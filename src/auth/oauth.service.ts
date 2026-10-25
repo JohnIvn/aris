@@ -19,7 +19,7 @@ type OAuthUser = Omit<UserData, 'password_hash' | 'role'> & {
   is_banned: boolean;
 };
 
-interface GoogleProfile {
+export interface GoogleProfile {
   email: string;
   firstname: string;
   lastname: string;
@@ -79,7 +79,7 @@ export class OAuthService {
    * Verifies the Google ID token against the client ID for the calling
    * platform. Returns null if the token is invalid or the email is unverified.
    */
-  private async verifyGoogleToken(
+  async verifyGoogleToken(
     idToken: string,
   ): Promise<GoogleProfile | null> {
     const audience = process.env.WEB_GOOGLE_CLIENT_ID;

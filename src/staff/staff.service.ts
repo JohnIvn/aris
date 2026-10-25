@@ -3,10 +3,14 @@ import argon2 from 'argon2';
 import { DatabaseService } from '../database/database.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { CreateStaffDto } from './staff.dto';
+import { OAuthService } from '../auth/oauth.service';
 
 @Injectable()
 export class StaffService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly oauthService: OAuthService,
+  ) {}
 
   async list() {
     try {
@@ -27,26 +31,43 @@ export class StaffService {
 
   async create(data: CreateStaffDto) {
     try {
-      const email = data.email.trim().toLowerCase();
-      const passwordHash = await argon2.hash(data.password);
+      let email = data.email.trim().toLowerCase();
+      let firstname = data.firstname.trim();
+      let lastname = data.lastname.trim();
+      let avatarUrl: string | null = null;
+      let passwordHash: string | null = null;
+      if (data.provider === 'google') {
+        if (!data.oauth_id_token) throw new Error('A verified Google account is required.');
+        const profile = await this.oauthService.verifyGoogleToken(data.oauth_id_token);
+        if (!profile) throw new Error('The Google account could not be verified.');
+        email = profile.email;
+        firstname = profile.firstname;
+        lastname = profile.lastname;
+        avatarUrl = profile.avatar_url;
+      } else {
+        if (!data.password) throw new Error('Password is required for a local account.');
+        passwordHash = await argon2.hash(data.password);
+      }
       const result = await this.databaseService.getClient().query(
         `INSERT INTO user_staffs
           (employee_id, username, firstname, middlename, lastname, email, password_hash,
-           position, department)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           avatar_url, position, department, provider)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING id, employee_id, username, firstname, middlename, lastname, email,
                    avatar_url, birthday, age, gender, position, department, provider,
                    is_banned, created_at, updated_at`,
         [
           data.employee_id.trim(),
           data.username.trim(),
-          data.firstname.trim(),
+          firstname,
           data.middlename?.trim() || null,
-          data.lastname.trim(),
+          lastname,
           email,
           passwordHash,
+          avatarUrl,
           data.position?.trim() || null,
           data.department?.trim() || null,
+          data.provider ?? 'local',
         ],
       );
       return SuccessHandler('Successfully Created Staff', 201, result.rows[0]);
@@ -68,6 +89,21 @@ export class StaffService {
       );
       if (!result.rowCount) return ErrorHandler('Staff member not found', 404);
       return SuccessHandler('Successfully Updated Staff Status', 200, result.rows[0]);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500, error.name)
+        : ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  async deleteStaff(id: string) {
+    try {
+      const result = await this.databaseService.getClient().query(
+        `DELETE FROM user_staffs WHERE id = $1 RETURNING id`,
+        [id],
+      );
+      if (!result.rowCount) return ErrorHandler('Staff member not found', 404);
+      return SuccessHandler('Successfully Deleted Staff Member', 200, result.rows[0]);
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500, error.name)

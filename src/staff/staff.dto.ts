@@ -1,11 +1,14 @@
 import {
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
+import { ACCOUNT_PROVIDER } from '../lib/data/types';
 
 export class CreateStaffDto {
   @IsString()
@@ -35,9 +38,18 @@ export class CreateStaffDto {
   @MaxLength(60)
   lastname!: string;
 
+  @ValidateIf((data) => data.provider !== 'google')
   @IsString()
   @MinLength(8)
-  password!: string;
+  password?: string;
+
+  @IsEnum(ACCOUNT_PROVIDER)
+  @IsOptional()
+  provider?: (typeof ACCOUNT_PROVIDER)[number];
+
+  @IsString()
+  @IsOptional()
+  oauth_id_token?: string;
 
   @IsString()
   @IsOptional()
