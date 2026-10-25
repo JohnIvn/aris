@@ -28,6 +28,8 @@ import { createMeetingRecords } from './models/meeting_records.model';
 import { createMeetingLogs } from './models/meeting_logs.model';
 import createReportEntries from './models/entries.model';
 import createDtrModel from './models/dtr.model';
+import { createHardwareEvents } from './models/hardware_events.model';
+import { createSoftwareMonitoring } from './models/software_monitoring.model';
 
 dotenv.config();
 
@@ -116,6 +118,8 @@ export class DatabaseService implements OnModuleInit {
       await createRestoreLogs(this.pool);
       await createMeetingRecords(this.pool);
       await createMeetingLogs(this.pool);
+      await createHardwareEvents(this.pool);
+      await createSoftwareMonitoring(this.pool);
       await createDtrModel(this.pool);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {
