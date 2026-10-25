@@ -27,37 +27,39 @@ export class NotificationsService {
     userId: string,
     type: NotificationType,
     title: string,
-    body: string,
-    entityType: string,
-    entityId: string | null,
-    actorId: string | null,
+    description: string,
+    reportId: string | null = null,
   ): Promise<Notification> {
     return this.createNotificationRecord(
       userId,
       type,
       title,
-      body,
-      entityType,
-      entityId,
-      actorId,
+      description,
+      reportId,
     );
   }
 
+  /**
+   * userId is a professor or a staff id. It goes into whichever column
+   * matches; the CHECK constraint rejects ids found in neither table.
+   */
   private async createNotificationRecord(
     userId: string,
     type: NotificationType,
     title: string,
-    body: string,
-    entityType: string,
-    entityId: string | null,
-    actorId: string | null,
+    description: string,
+    reportId: string | null,
   ): Promise<Notification> {
     const res = await this.db.query<Notification>(
-      `INSERT INTO notifications
-       (user_id, type, title, body, entity_type, entity_id, actor_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO user_notifications
+         (professor_id, staff_id, type, title, description, report_id)
+       VALUES (
+         (SELECT id FROM user_professors WHERE id = $1),
+         (SELECT id FROM user_staffs WHERE id = $1),
+         $2, $3, $4, $5
+       )
        RETURNING *`,
-      [userId, type, title, body, entityType, entityId, actorId],
+      [userId, type, title, description, reportId],
     );
 
     const notification = res.rows[0];
@@ -118,11 +120,7 @@ export class NotificationsService {
     )}`;
   }
 
-  private async notifyStageChecker(
-    ar: ReportData,
-    stage: ArStage,
-    actorId: string,
-  ) {
+  private async notifyStageChecker(ar: ReportData, stage: ArStage) {
     const recipientId = this.getStageRecipientId(ar, stage);
     if (!recipientId) return;
 
@@ -131,9 +129,7 @@ export class NotificationsService {
       this.getStageNotificationType(stage),
       'AR Pending Your Review',
       `"${this.getArLabel(ar)}" is awaiting your review as ${this.getStageLabel(stage)}.`,
-      'accomplishment_reports',
       ar.id,
-      actorId,
     );
   }
 
@@ -143,17 +139,15 @@ export class NotificationsService {
       'ar_submitted',
       'Accomplishment Report Submitted',
       `Your accomplishment report "${this.getArLabel(ar)}" has been submitted for review.`,
-      'accomplishment_reports',
       ar.id,
-      submitterId,
     );
 
-    await this.notifyStageChecker(ar, this.AR_STAGE_ORDER[0], submitterId);
+    await this.notifyStageChecker(ar, this.AR_STAGE_ORDER[0]);
   }
 
   async notifyArForwarded(
     ar: ReportData,
-    actorId: string,
+    _actorId: string,
     fromStage: ArStage,
     toStage: ArStage,
   ) {
@@ -164,15 +158,13 @@ export class NotificationsService {
       'ar_forwarded',
       'Accomplishment Report Forwarded',
       `Your report "${this.getArLabel(ar)}" was approved by ${this.getStageLabel(fromStage)} and forwarded to ${this.getStageLabel(toStage)}.`,
-      'accomplishment_reports',
       ar.id,
-      actorId,
     );
 
-    await this.notifyStageChecker(ar, toStage, actorId);
+    await this.notifyStageChecker(ar, toStage);
   }
 
-  async notifyArApproved(ar: ReportData, actorId: string) {
+  async notifyArApproved(ar: ReportData) {
     if (!ar.user_id) return;
 
     await this.createNotificationRecord(
@@ -180,13 +172,11 @@ export class NotificationsService {
       'ar_approved',
       'Accomplishment Report Approved',
       `Your accomplishment report "${this.getArLabel(ar)}" has been fully approved.`,
-      'accomplishment_reports',
       ar.id,
-      actorId,
     );
   }
 
-  async notifyArRejected(ar: ReportData, actorId: string, reason?: string) {
+  async notifyArRejected(ar: ReportData, _actorId: string, reason?: string) {
     if (!ar.user_id) return;
 
     await this.createNotificationRecord(
@@ -194,13 +184,11 @@ export class NotificationsService {
       'ar_rejected',
       'Accomplishment Report Rejected',
       `Your accomplishment report "${this.getArLabel(ar)}" was rejected.${reason ? ` Reason: ${reason}` : ''}`,
-      'accomplishment_reports',
       ar.id,
-      actorId,
     );
   }
 
-  async notifyArReturned(ar: ReportData, actorId: string, reason?: string) {
+  async notifyArReturned(ar: ReportData, _actorId: string, reason?: string) {
     if (!ar.user_id) return;
 
     await this.createNotificationRecord(
@@ -208,9 +196,7 @@ export class NotificationsService {
       'ar_returned',
       'Accomplishment Report Returned',
       `Your accomplishment report "${this.getArLabel(ar)}" was returned for revision.${reason ? ` Note: ${reason}` : ''}`,
-      'accomplishment_reports',
       ar.id,
-      actorId,
     );
   }
 
@@ -227,9 +213,7 @@ export class NotificationsService {
       'ar_updated',
       'Accomplishment Report Updated',
       `"${this.getArLabel(ar)}" was updated and resubmitted for your review.`,
-      'accomplishment_reports',
       ar.id,
-      actorId,
     );
   }
 
@@ -255,7 +239,7 @@ export class NotificationsService {
         return;
 
       case 'approved':
-        await this.notifyArApproved(ar, actorId);
+        await this.notifyArApproved(ar);
         return;
 
       case 'rejected':
@@ -273,40 +257,36 @@ export class NotificationsService {
           'ar_status_changed',
           'Accomplishment Report Status Updated',
           `Your accomplishment report "${this.getArLabel(ar)}" status changed to ${status}.`,
-          'accomplishment_reports',
           ar.id,
-          actorId,
         );
     }
   }
 
-  async notifyPayrollUpdated(payroll: Payroll, actorId: string) {
+  // Payroll notifications have no link column in user_notifications.
+
+  async notifyPayrollUpdated(payroll: Payroll) {
     await this.createNotificationRecord(
       payroll.employee_id,
       'payroll_updated',
       'Payroll Updated',
       `Your payroll for ${payroll.period} has been updated.`,
-      'payrolls',
-      payroll.id,
-      actorId,
+      null,
     );
   }
 
-  async notifyPayrollReady(payroll: Payroll, actorId: string) {
+  async notifyPayrollReady(payroll: Payroll) {
     await this.createNotificationRecord(
       payroll.employee_id,
       'payroll_ready',
       'Payroll Ready to be Received',
       `Your payroll for ${payroll.period} has been processed and is ready to be received.`,
-      'payrolls',
-      payroll.id,
-      actorId,
+      null,
     );
   }
 
   async notifyPayrollRejected(
     payroll: Payroll,
-    actorId: string,
+    _actorId: string,
     reason?: string,
   ) {
     await this.createNotificationRecord(
@@ -314,15 +294,13 @@ export class NotificationsService {
       'payroll_rejected',
       'Payroll Not Viable',
       `Your payroll for ${payroll.period} could not be processed.${reason ? ` Reason: ${reason}` : ''}`,
-      'payrolls',
-      payroll.id,
-      actorId,
+      null,
     );
   }
 
   async notifyPayrollMoved(
     payroll: Payroll,
-    actorId: string,
+    _actorId: string,
     fromStatus: PayrollStatus,
     toStatus: PayrollStatus,
   ) {
@@ -331,9 +309,7 @@ export class NotificationsService {
       'payroll_moved',
       'Payroll Status Updated',
       `Your payroll for ${payroll.period} moved from ${fromStatus} to ${toStatus}.`,
-      'payrolls',
-      payroll.id,
-      actorId,
+      null,
     );
   }
 
@@ -345,7 +321,7 @@ export class NotificationsService {
   ) {
     switch (status) {
       case 'ready':
-        await this.notifyPayrollReady(payroll, actorId);
+        await this.notifyPayrollReady(payroll);
         return;
 
       case 'rejected':
@@ -362,21 +338,29 @@ export class NotificationsService {
           'payroll_status_changed',
           'Payroll Status Updated',
           `Your payroll for ${payroll.period} status changed to ${status}.`,
-          'payrolls',
-          payroll.id,
-          actorId,
+          null,
         );
     }
   }
 
-  async fetchNotificationByUser(userId: string, offset: number, limit: number) {
+  async fetchNotificationByUser(
+    userId: string,
+    offset?: number,
+    limit?: number,
+  ) {
     try {
-      const res = await this.db.query(
-        `SELECT * FROM notifications
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       OFFSET $2 LIMIT $3`,
-        [userId, offset ?? 0, limit ?? 9],
+      const safeOffset = Math.max(Math.trunc(Number(offset)) || 0, 0);
+      const safeLimit = Math.min(
+        Math.max(Math.trunc(Number(limit)) || 20, 1),
+        100,
+      );
+
+      const res = await this.db.query<Notification>(
+        `SELECT * FROM user_notifications
+         WHERE professor_id = $1 OR staff_id = $1
+         ORDER BY created_at DESC
+         OFFSET $2 LIMIT $3`,
+        [userId, safeOffset, safeLimit],
       );
       return SuccessHandler(
         'Successfully fetched user notifications',
@@ -389,10 +373,7 @@ export class NotificationsService {
     }
   }
 
-  async insertNotification(
-    userId: string,
-    payload: Partial<NotificationDto> & { title: string },
-  ) {
+  async insertNotification(userId: string, payload: NotificationDto) {
     try {
       const user = await getUserById(this.db, userId);
 
@@ -400,15 +381,13 @@ export class NotificationsService {
 
       const notification = await this.createNotificationRecord(
         userId,
-        payload.type as NotificationType,
-        payload.title,
-        payload.body ?? '',
-        payload.entity_type ?? '',
-        payload.entity_id ?? null,
-        payload.actor_id ?? null,
+        payload.type,
+        payload.title ?? '',
+        payload.description,
+        payload.report_id ?? null,
       );
       return SuccessHandler(
-        'Succesfully added notification',
+        'Successfully added notification',
         201,
         notification,
       );
@@ -423,17 +402,47 @@ export class NotificationsService {
 
   async markReadNotificationByUser(userId: string, notificationId: string) {
     try {
-      const res = await this.db.query(
-        `UPDATE notifications
-        SET is_read = true 
-        WHERE id = $1 AND user_id = $2
-        RETURNING *`,
+      const res = await this.db.query<Notification>(
+        `UPDATE user_notifications
+         SET is_read = true, updated_at = NOW()
+         WHERE id = $1 AND (professor_id = $2 OR staff_id = $2)
+         RETURNING *`,
         [notificationId, userId],
       );
 
+      if (res.rowCount === 0) {
+        return ErrorHandler('Notification not found', 404);
+      }
+
       this.realtimeGateway.emitNotificationRead(userId, notificationId);
 
-      return SuccessHandler('Successfully marked as read', 200, res.rows);
+      return SuccessHandler('Successfully marked as read', 200, res.rows[0]);
+    } catch (error) {
+      if (error instanceof Error) {
+        return ErrorHandler(error.message, 500);
+      }
+
+      return ErrorHandler('Internal Server Error', 500);
+    }
+  }
+
+  async markAllReadByUser(userId: string) {
+    try {
+      const res = await this.db.query<{ id: string }>(
+        `UPDATE user_notifications
+         SET is_read = true, updated_at = NOW()
+         WHERE (professor_id = $1 OR staff_id = $1) AND is_read = false
+         RETURNING id`,
+        [userId],
+      );
+
+      for (const row of res.rows) {
+        this.realtimeGateway.emitNotificationRead(userId, row.id);
+      }
+
+      return SuccessHandler('Successfully marked all as read', 200, {
+        updated: res.rowCount ?? 0,
+      });
     } catch (error) {
       if (error instanceof Error) {
         return ErrorHandler(error.message, 500);
@@ -445,27 +454,23 @@ export class NotificationsService {
 
   async deleteNotificationByUser(userId: string, notificationId: string) {
     try {
-      const res = await this.db.query(
-        `SELECT * FROM notifications WHERE user_id = $1 AND id = $2`,
-        [userId, notificationId],
-      );
-      if (res.rowCount === 0)
-        return ErrorHandler(`Error Notification Deleted or Doesn't Exist`, 404);
-
-      await this.db.query(
-        `DELETE FROM notifications
-        WHERE user_id = $1 AND id = $2`,
+      const res = await this.db.query<Notification>(
+        `DELETE FROM user_notifications
+         WHERE id = $2 AND (professor_id = $1 OR staff_id = $1)
+         RETURNING *`,
         [userId, notificationId],
       );
 
-      const notification = res.rows[0] as Notification;
+      if (res.rowCount === 0) {
+        return ErrorHandler(`Notification Deleted or Doesn't Exist`, 404);
+      }
 
       this.realtimeGateway.emitNotificationDeleted(userId, notificationId);
 
       return SuccessHandler(
-        'Successfully fetched user notifications',
+        'Successfully deleted notification',
         200,
-        notification,
+        res.rows[0],
       );
     } catch (error) {
       if (error instanceof Error) {

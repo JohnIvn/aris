@@ -3,6 +3,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
@@ -30,13 +31,24 @@ export class NotificationsController {
     );
   }
 
+  @Patch('read-all')
+  markAllRead(@CurrentUser() user: UserSession) {
+    return this.notificationsService.markAllReadByUser(user.id);
+  }
+
   @Patch(':id/read')
-  markRead(@CurrentUser() user: UserSession, @Param('id') id: string) {
+  markRead(
+    @CurrentUser() user: UserSession,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.notificationsService.markReadNotificationByUser(user.id, id);
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: UserSession, @Param('id') id: string) {
+  remove(
+    @CurrentUser() user: UserSession,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.notificationsService.deleteNotificationByUser(user.id, id);
   }
 }
