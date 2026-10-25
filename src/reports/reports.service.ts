@@ -670,7 +670,7 @@ export class ReportsService {
     const res = await this.db.query<Dtr>(
       `
     SELECT id, time_in, time_out, total_hours, shift_date
-    FROM daily_time_records
+    FROM dtr
     WHERE (professor_id = $1 OR staff_id = $1)
       AND shift_date BETWEEN $2::date AND $3::date
     ORDER BY shift_date ASC, time_in ASC
