@@ -7,3 +7,5 @@ export interface Dtr {
   total_hours: number;
   shift_date: string;
 }
+
+export type DtrStatus = 'present' | 'late' | 'missing' | 'absent';

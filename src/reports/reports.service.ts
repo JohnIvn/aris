@@ -17,7 +17,10 @@ import { ReportData, ReportEntryData } from '../lib/data/reports.interface';
 import { UserSession } from '../lib/data/interfaces';
 import { LoggerService } from '../logger/logger.service';
 import { getUserById } from '../lib/utils/helpers';
-import { Dtr } from '../lib/data/dtr.interface';
+import { Dtr, DtrStatus } from '../lib/data/dtr.interface';
+
+const SHIFT_STARTS_MIN = [8 * 60, 13 * 60];
+const LATE_GRACE_MIN = 0;
 
 @Injectable()
 export class ReportsService {
@@ -490,9 +493,14 @@ export class ReportsService {
             `${periodEnd.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ` +
             `${periodEnd.getUTCDate().toString().padStart(2, '0')}`;
 
-          const [arTally, dtrTally] = await Promise.all([
+          const [arTally, dtrTally, dtrEntries] = await Promise.all([
             this.calculateARTally(report.entries ?? []),
             this.calculateDTRTally(
+              user.id,
+              report.period_start,
+              report.period_end,
+            ),
+            this.fetchDTREntries(
               user.id,
               report.period_start,
               report.period_end,
@@ -518,6 +526,7 @@ export class ReportsService {
             remarks: report.remarks,
             arTally,
             dtrTally,
+            dtrEntries,
             payroll_availability: report.payroll_availability,
           };
         }),
@@ -621,7 +630,6 @@ export class ReportsService {
 
       let duration = endTotalMinutes - startTotalMinutes;
 
-      // Support overnight shifts, e.g. 10 PM to 6 AM.
       if (duration < 0) {
         duration += 24 * 60;
       }
@@ -652,5 +660,43 @@ export class ReportsService {
     }, 0);
 
     return Number((totalMinutes / 60).toFixed(2));
+  }
+
+  private async fetchDTREntries(
+    userId: string,
+    periodStart: string | Date,
+    periodEnd: string | Date,
+  ) {
+    const res = await this.db.query<Dtr>(
+      `
+    SELECT id, time_in, time_out, total_hours, shift_date
+    FROM daily_time_records
+    WHERE (professor_id = $1 OR staff_id = $1)
+      AND shift_date BETWEEN $2::date AND $3::date
+    ORDER BY shift_date ASC, time_in ASC
+    `,
+      [userId, periodStart, periodEnd],
+    );
+
+    return res.rows.map((row) => ({
+      id: row.id,
+      date: row.shift_date,
+      time_in: row.time_in?.slice(0, 5) ?? null,
+      time_out: row.time_out?.slice(0, 5) ?? null,
+      total_hours: Number(row.total_hours ?? 0),
+      status: this.dtrStatus(row.time_in, row.time_out),
+    }));
+  }
+
+  private dtrStatus(timeIn: string | null, timeOut: string | null): DtrStatus {
+    if (!timeIn || !timeOut) return 'missing';
+
+    const [h, m] = timeIn.split(':').map(Number);
+    const minutes = h * 60 + m;
+    const start = SHIFT_STARTS_MIN.reduce((a, b) =>
+      Math.abs(b - minutes) < Math.abs(a - minutes) ? b : a,
+    );
+
+    return minutes > start + LATE_GRACE_MIN ? 'late' : 'present';
   }
 }
