@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   DefaultValuePipe,
+  Get,
   ParseIntPipe,
   Query,
   UseGuards,
@@ -27,6 +28,17 @@ import { Roles } from '../lib/decorators/roles.decorator';
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
+
+  @Get('mobile')
+  @Roles('professor', 'staff')
+  @UseGuards(JwtCookieGuard)
+  async fetchReportsForMobile(
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @CurrentUser() user: UserSession,
+  ) {
+    return this.reportsService.fetchReportsForMobile(user, offset, limit);
+  }
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
