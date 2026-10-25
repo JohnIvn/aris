@@ -504,7 +504,6 @@ export class ReportsService {
             periodLabel,
             stage: report.approval_stage,
             updatedAt: report.updated_at,
-            rejectionRemarks: 'TODO',
             professorName: [
               user_data.firstname,
               user_data.middlename,
