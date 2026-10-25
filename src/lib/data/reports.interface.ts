@@ -13,6 +13,7 @@ export interface ReportData {
   department_secretary_id: string | null;
   hr_id: string | null;
   accounting_id: string | null;
+  payroll_availability: boolean;
   created_at: string;
   updated_at: string;
 }

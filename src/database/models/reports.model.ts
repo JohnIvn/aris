@@ -13,6 +13,7 @@ export default async function createReports(client: Pool) {
         approval_stage TEXT NOT NULL REFERENCES approval_stages(stage_key) ON DELETE CASCADE ON UPDATE CASCADE,
         remarks TEXT DEFAULT NULL,
         entries UUID[],
+        payroll_availability BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )

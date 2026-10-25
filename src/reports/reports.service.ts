@@ -518,6 +518,7 @@ export class ReportsService {
             remarks: report.remarks,
             arTally,
             dtrTally,
+            payroll_availability: report.payroll_availability,
           };
         }),
       );
