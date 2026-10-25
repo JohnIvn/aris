@@ -27,13 +27,15 @@ export class AnnouncementsService {
     return this.databaseService.getClient();
   }
 
-  async listAnnouncements(filters: ListAnnouncementsDto) {
+  async listAnnouncements(filters: ListAnnouncementsDto, user?: UserSession) {
     try {
       const values: string[] = [];
       const categoryClause =
         filters.category && filters.category !== 'all'
           ? `AND category = $${values.push(filters.category)}`
           : '';
+      const audienceClause =
+        user?.role === 'admin' ? '' : `AND audience = 'Everyone'`;
 
       const result = await this.db.query<AnnouncementRow>(
         `SELECT id, title, body, category, audience, is_pinned, status,
@@ -42,6 +44,7 @@ export class AnnouncementsService {
           WHERE status = 'sent'
             AND (expires_at IS NULL OR expires_at > NOW())
             ${categoryClause}
+            ${audienceClause}
           ORDER BY is_pinned DESC, published_at DESC`,
         values,
       );
@@ -99,6 +102,11 @@ export class AnnouncementsService {
       tag: announcement.category,
       audience: announcement.audience,
       pinned: announcement.is_pinned,
+      tone: announcement.category === 'System'
+        ? 'amber'
+        : announcement.category === 'AI / ML'
+          ? 'blue'
+          : 'green',
       status: announcement.status,
       publishedAt: announcement.published_at,
       expiresAt: announcement.expires_at,

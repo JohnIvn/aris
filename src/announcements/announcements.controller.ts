@@ -10,17 +10,20 @@ import {
 import { AnnouncementsService } from './announcements.service';
 
 @Controller('announcements')
-@Roles('admin')
 @UseGuards(JwtCookieGuard)
 export class AnnouncementsController {
   constructor(private readonly announcementsService: AnnouncementsService) {}
 
   @Get()
-  list(@Query() filters: ListAnnouncementsDto) {
-    return this.announcementsService.listAnnouncements(filters);
+  list(
+    @CurrentUser() user: UserSession,
+    @Query() filters: ListAnnouncementsDto,
+  ) {
+    return this.announcementsService.listAnnouncements(filters, user);
   }
 
   @Post()
+  @Roles('admin')
   create(
     @CurrentUser() user: UserSession,
     @Body() data: CreateAnnouncementDto,
