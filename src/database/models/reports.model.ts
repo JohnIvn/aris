@@ -6,7 +6,7 @@ export default async function createReports(client: Pool) {
     CREATE TABLE IF NOT EXISTS accomplishment_reports (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL,
-        employee_id TEXT UNIQUE NOT NULL,
+        employee_id TEXT NOT NULL,
         faculty_no TEXT NOT NULL,
         period_start DATE NOT NULL,
         period_end DATE NOT NULL,
