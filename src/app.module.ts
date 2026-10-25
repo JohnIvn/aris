@@ -12,6 +12,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ProfessorsModule } from './professors/professors.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ProfessorsModule } from './professors/professors.module';
     MeetingsModule,
     NotificationsModule,
     ProfessorsModule,
+    AnnouncementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
