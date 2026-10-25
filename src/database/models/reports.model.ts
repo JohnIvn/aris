@@ -12,7 +12,7 @@ export default async function createReports(client: Pool) {
         period_end DATE NOT NULL,
         approval_stage TEXT NOT NULL REFERENCES approval_stages(stage_key) ON DELETE CASCADE ON UPDATE CASCADE,
         remarks TEXT DEFAULT NULL,
-        entries UUID[] NOT NULL,
+        entries UUID[],
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
