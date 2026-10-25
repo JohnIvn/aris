@@ -1,4 +1,11 @@
-import { Body, Controller, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  DefaultValuePipe,
+  ParseIntPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import {
   ReportDeleteDto,
@@ -23,15 +30,18 @@ export class ReportsController {
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
-  async fetchReports(@Query() offset: number, @Query() limit: number) {
+  async fetchReports(
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
     return this.reportsService.fetchReports(offset, limit);
   }
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchReportByUser(
-    @Query() offset: number,
-    @Query() limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Body() data: ReportFetchUserDto,
   ) {
     return this.reportsService.fetchReportByUser(offset, limit, data);
@@ -40,8 +50,8 @@ export class ReportsController {
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchReportById(
-    @Query() offset: number,
-    @Query() limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Body() data: ReportFetchDto,
   ) {
     return this.reportsService.fetchReportById(offset, limit, data);
@@ -76,15 +86,18 @@ export class ReportsController {
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
-  async fetchReportEntries(@Query() offset: number, @Query() limit: number) {
+  async fetchReportEntries(
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
     return this.reportsService.fetchReportEntries(offset, limit);
   }
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchReportEntriesByReport(
-    @Query() offset: number,
-    @Query() limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Body() data: ReportEntryFetchReportDto,
   ) {
     return this.reportsService.fetchReportEntriesByReport(offset, limit, data);
@@ -93,8 +106,8 @@ export class ReportsController {
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchReportEntryById(
-    @Query() offset: number,
-    @Query() limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Body() data: ReportEntryFetchDto,
   ) {
     return this.reportsService.fetchReportEntryById(offset, limit, data);
