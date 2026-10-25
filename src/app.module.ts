@@ -12,6 +12,13 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ProfessorsModule } from './professors/professors.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
+import { AuditModule } from './audit/audit.module';
+import { StaffModule } from './staff/staff.module';
+import { SystemMonitoringModule } from './system-monitoring/system-monitoring.module';
+import { DatabaseManagementModule } from './database-management/database-management.module';
+import { UserSettingsModule } from './user-settings/user-settings.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
 
 @Module({
   imports: [
@@ -26,6 +33,13 @@ import { ProfessorsModule } from './professors/professors.module';
     MeetingsModule,
     NotificationsModule,
     ProfessorsModule,
+    AnnouncementsModule,
+    AuditModule,
+    StaffModule,
+    SystemMonitoringModule,
+    DatabaseManagementModule,
+    UserSettingsModule,
+    SystemSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

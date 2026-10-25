@@ -1,4 +1,12 @@
-import { Body, Controller, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  DefaultValuePipe,
+  Get,
+  ParseIntPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import {
   PayrollDeleteDto,
@@ -18,15 +26,19 @@ export class PayrollController {
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
-  async fetchPayrolls(@Query() offset: number, @Query() limit: number) {
+  @Get()
+  async fetchPayrolls(
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
+  ) {
     return this.payrollService.fetchPayrolls(offset, limit);
   }
 
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchPayrollByUser(
-    @Query() offset: number,
-    @Query() limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Body() data: PayrollFetchUserDto,
   ) {
     return this.payrollService.fetchPayrollByUser(offset, limit, data);
@@ -35,8 +47,8 @@ export class PayrollController {
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchPayrollById(
-    @Query() offset: number,
-    @Query() limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Body() data: PayrollFetchDto,
   ) {
     return this.payrollService.fetchPayrollById(offset, limit, data);
