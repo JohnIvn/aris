@@ -50,7 +50,16 @@ async function bootstrap() {
   });
 
   await app.register(rateLimit, {
-    max: 100,
+    max: process.env.NODE_ENV === 'production' ? 1000 : 10000,
+    allowList: (req) => {
+      const ip = req.ip;
+      return (
+        process.env.NODE_ENV !== 'production' ||
+        ip === '127.0.0.1' ||
+        ip === '::1' ||
+        ip === 'localhost'
+      );
+    },
     timeWindow: '1 minute',
   });
 
