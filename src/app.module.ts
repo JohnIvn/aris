@@ -16,6 +16,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { AuditModule } from './audit/audit.module';
 import { StaffModule } from './staff/staff.module';
 import { SystemMonitoringModule } from './system-monitoring/system-monitoring.module';
+import { DatabaseManagementModule } from './database-management/database-management.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { SystemMonitoringModule } from './system-monitoring/system-monitoring.mo
     AuditModule,
     StaffModule,
     SystemMonitoringModule,
+    DatabaseManagementModule,
   ],
   controllers: [AppController],
   providers: [AppService],
