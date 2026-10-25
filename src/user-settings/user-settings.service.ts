@@ -110,7 +110,14 @@ export class UserSettingsService {
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowed.includes(file.mimetype)) return this.invalid('Only JPG, PNG, and WEBP photos are supported');
     const content = await file.toBuffer();
-    if (content.length > 5 * 1024 * 1024) return this.invalid('Photo must be 5 MB or smaller');
+    const limitResult = await this.db.query<{ setting_value: string }>(
+      `SELECT setting_value FROM system_settings
+       WHERE setting_key = 'maxUploadMb' LIMIT 1`,
+    );
+    const maxUploadMb = Math.min(6, Math.max(1, Number(limitResult.rows[0]?.setting_value ?? 6)));
+    if (content.length > maxUploadMb * 1024 * 1024) {
+      return this.invalid(`Photo must be ${maxUploadMb} MB or smaller`);
+    }
     const extension = file.mimetype.split('/')[1];
     const directory = join(process.cwd(), 'uploads', 'photos');
     const filename = `${user.id}.${extension}`;
