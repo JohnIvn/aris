@@ -362,10 +362,47 @@ export class NotificationsService {
          OFFSET $2 LIMIT $3`,
         [userId, safeOffset, safeLimit],
       );
+      // Fetch active announcements as notifications so announcements and notifications are unified
+      const announcementsRes = await this.db.query<{
+        id: string;
+        title: string;
+        body: string;
+        category: string;
+        is_pinned: boolean;
+        published_at: Date | null;
+        created_at: Date;
+      }>(
+        `SELECT id, title, body, category, is_pinned, published_at, created_at
+           FROM announcements
+          WHERE status = 'sent'
+            AND (expires_at IS NULL OR expires_at > NOW())
+          ORDER BY is_pinned DESC, COALESCE(published_at, created_at) DESC
+          LIMIT $1`,
+        [safeLimit],
+      );
+
+      const announcementNotifs = announcementsRes.rows.map((a) => ({
+        id: a.id,
+        professor_id: null,
+        staff_id: null,
+        title: a.title,
+        description: a.body,
+        body: a.body,
+        type: 'performance_notification' as NotificationType,
+        report_id: null,
+        is_read: false,
+        pinned: a.is_pinned,
+        category: a.category,
+        created_at: (a.published_at ?? a.created_at).toISOString(),
+        updated_at: (a.published_at ?? a.created_at).toISOString(),
+      }));
+
+      const combined = [...announcementNotifs, ...res.rows];
+
       return SuccessHandler(
         'Successfully fetched user notifications',
         200,
-        res.rows,
+        combined,
       );
     } catch (error) {
       if (error instanceof Error) return ErrorHandler(error.message, 500);
