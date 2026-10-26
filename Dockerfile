@@ -20,8 +20,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install production dependencies only
-RUN apk add --no-cache python3 make g++
+# Install production dependencies and the PostgreSQL client used by manual backups
+RUN apk add --no-cache python3 make g++ postgresql-client
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
