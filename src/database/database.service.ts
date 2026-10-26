@@ -133,6 +133,9 @@ export class DatabaseService implements OnModuleInit {
         ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS phone TEXT;
         ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS phone TEXT;
         ALTER TABLE user_staffs ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS address TEXT;
+        ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS address TEXT;
+        ALTER TABLE user_staffs ADD COLUMN IF NOT EXISTS address TEXT;
       `);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {

@@ -66,3 +66,50 @@ export class UpdateStaffStatusDto {
   @IsBoolean()
   active!: boolean;
 }
+
+export class UpdateStaffDto {
+  @IsString()
+  @IsOptional()
+  employee_id?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(60)
+  firstname?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(60)
+  middlename?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(60)
+  lastname?: string;
+
+  @IsEmail()
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  position?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(150)
+  department?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  active?: boolean;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+}

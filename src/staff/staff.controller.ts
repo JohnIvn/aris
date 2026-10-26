@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
-import { CreateStaffDto, UpdateStaffStatusDto } from './staff.dto';
+import { CreateStaffDto, UpdateStaffDto, UpdateStaffStatusDto } from './staff.dto';
 import { StaffService } from './staff.service';
 
 @Controller('staff')
@@ -16,6 +16,14 @@ export class StaffController {
   @Post()
   create(@Body() data: CreateStaffDto) {
     return this.staffService.create(data);
+  }
+
+  @Patch(':id')
+  updateStaff(
+    @Param('id') id: string,
+    @Body() data: UpdateStaffDto,
+  ) {
+    return this.staffService.updateStaff(id, data);
   }
 
   @Patch(':id/status')

@@ -12,6 +12,7 @@ import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 import { ProfessorsService } from './professors.service';
 import {
   CreateProfessorDto,
+  UpdateProfessorDto,
   UpdateProfessorStatusDto,
 } from './dto/professor.dto';
 
@@ -28,6 +29,14 @@ export class ProfessorsController {
   @Post()
   createProfessor(@Body() data: CreateProfessorDto) {
     return this.professorsService.createProfessor(data);
+  }
+
+  @Patch(':id')
+  updateProfessor(
+    @Param('id') id: string,
+    @Body() data: UpdateProfessorDto,
+  ) {
+    return this.professorsService.updateProfessor(id, data);
   }
 
   @Patch(':id/status')
