@@ -22,5 +22,27 @@ export async function createSupportTickets(client: Pool) {
 
     CREATE INDEX IF NOT EXISTS idx_support_tickets_opened_by
     ON support_tickets (opened_by);
+
+    CREATE TABLE IF NOT EXISTS support_ticket_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+      author_id UUID NOT NULL,
+      author_role TEXT NOT NULL CHECK (author_role IN ('requester', 'admin')),
+      body TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_support_ticket_messages_ticket
+    ON support_ticket_messages (ticket_id, created_at);
+
+    DO $$ BEGIN
+      EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE support_tickets';
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+
+    DO $$ BEGIN
+      EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE support_ticket_messages';
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
   `);
 }
