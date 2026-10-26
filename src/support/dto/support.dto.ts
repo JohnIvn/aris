@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class CreateSupportTicketDto {
   @IsString()
@@ -35,4 +35,27 @@ export class UpdateSupportTicketDto {
   @IsOptional()
   @IsUUID()
   assignedTo?: string | null;
+}
+
+export class CreateDirectMessageDto {
+  @IsString()
+  @IsNotEmpty()
+  recipientId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  recipientRole!: string;
+
+  @IsOptional()
+  @IsString()
+  recipientName?: string;
+
+  @IsOptional()
+  @IsString()
+  subject?: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  body!: string;
 }

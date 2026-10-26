@@ -36,7 +36,8 @@ export class CurriculumService {
            ORDER BY r.hierarchy_level ASC, r.name ASC
         `),
         this.client.query(`
-          SELECT c.*
+          SELECT c.*,
+                 (SELECT COUNT(*)::int FROM user_professors up WHERE up.department = c.department_name) AS professor_count
             FROM curriculum_courses c
            ORDER BY c.code ASC
         `),
@@ -346,8 +347,15 @@ export class CurriculumService {
   async listCourses(dept?: string) {
     try {
       const query = dept
-        ? `SELECT * FROM curriculum_courses WHERE department_name = $1 ORDER BY code ASC`
-        : `SELECT * FROM curriculum_courses ORDER BY code ASC`;
+        ? `SELECT c.*,
+                  (SELECT COUNT(*)::int FROM user_professors up WHERE up.department = c.department_name) AS professor_count
+             FROM curriculum_courses c
+            WHERE c.department_name = $1
+            ORDER BY c.code ASC`
+        : `SELECT c.*,
+                  (SELECT COUNT(*)::int FROM user_professors up WHERE up.department = c.department_name) AS professor_count
+             FROM curriculum_courses c
+            ORDER BY c.code ASC`;
       const params = dept ? [dept] : [];
       const result = await this.client.query(query, params);
       return SuccessHandler('Courses fetched successfully', 200, result.rows);

@@ -6,6 +6,7 @@ import {
 import { DatabaseService } from '../database/database.service';
 import type { UserSession } from '../lib/data/interfaces';
 import {
+  CreateDirectMessageDto,
   CreateSupportTicketDto,
   CreateTicketMessageDto,
   UpdateSupportTicketDto,
@@ -161,6 +162,131 @@ export class SupportService {
       text: message.rows[0].body,
       time: message.rows[0].created_at,
     };
+  }
+
+  // --- DIRECT MESSAGES (STAFF & PROFESSORS) ---
+  async getContacts() {
+    const client = this.databaseService.getClient();
+    const result = await client.query(`
+      SELECT id, employee_id,
+             CONCAT_WS(' ', firstname, lastname) AS name,
+             firstname, lastname, email,
+             COALESCE(department, 'Unassigned') AS department,
+             COALESCE(position, 'Faculty') AS position,
+             avatar_url,
+             'professor' AS role
+        FROM user_professors
+       WHERE is_banned = FALSE
+      UNION ALL
+      SELECT id, employee_id,
+             CONCAT_WS(' ', firstname, lastname) AS name,
+             firstname, lastname, email,
+             COALESCE(department, 'General Staff') AS department,
+             COALESCE(position, 'Staff') AS position,
+             avatar_url,
+             'staff' AS role
+        FROM user_staffs
+       WHERE is_banned = FALSE
+       ORDER BY role ASC, name ASC
+    `);
+    return result.rows;
+  }
+
+  async listMessages(user: UserSession, recipientId?: string) {
+    const client = this.databaseService.getClient();
+    let query = `
+      SELECT m.*,
+        m.created_at AS time
+      FROM direct_messages m
+    `;
+    const params: string[] = [];
+
+    if (recipientId) {
+      query += `
+        WHERE (m.sender_id = $1 AND m.recipient_id = $2)
+           OR (m.sender_id = $2 AND m.recipient_id = $1)
+        ORDER BY m.created_at ASC
+      `;
+      params.push(user.id, recipientId);
+    } else {
+      query += `
+        WHERE m.sender_id = $1 OR m.recipient_id = $1
+        ORDER BY m.created_at DESC
+      `;
+      params.push(user.id);
+    }
+
+    const result = await client.query(query, params);
+    return result.rows;
+  }
+
+  async sendMessage(user: UserSession, dto: CreateDirectMessageDto) {
+    const client = this.databaseService.getClient();
+
+    const senderRes = await client.query(
+      `
+        SELECT CONCAT_WS(' ', firstname, lastname) AS name
+        FROM (
+          SELECT id, firstname, lastname FROM user_admins
+          UNION ALL
+          SELECT id, firstname, lastname FROM user_staffs
+          UNION ALL
+          SELECT id, firstname, lastname FROM user_professors
+        ) u
+        WHERE u.id = $1
+      `,
+      [user.id],
+    );
+    const senderName = senderRes.rows[0]?.name || (user.role === 'admin' ? 'Administrator' : 'Staff');
+
+    let recipientName = dto.recipientName;
+    if (!recipientName) {
+      const recipientRes = await client.query(
+        `
+          SELECT CONCAT_WS(' ', firstname, lastname) AS name
+          FROM (
+            SELECT id, firstname, lastname FROM user_admins
+            UNION ALL
+            SELECT id, firstname, lastname FROM user_staffs
+            UNION ALL
+            SELECT id, firstname, lastname FROM user_professors
+          ) u
+          WHERE u.id = $1
+        `,
+        [dto.recipientId],
+      );
+      recipientName = recipientRes.rows[0]?.name || 'Recipient';
+    }
+
+    const result = await client.query(
+      `
+        INSERT INTO direct_messages
+          (sender_id, sender_role, sender_name, recipient_id, recipient_role, recipient_name, subject, body)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *, created_at AS time
+      `,
+      [
+        user.id,
+        user.role,
+        senderName,
+        dto.recipientId,
+        dto.recipientRole,
+        recipientName,
+        dto.subject?.trim() || null,
+        dto.body.trim(),
+      ],
+    );
+
+    return result.rows[0];
+  }
+
+  async markAsRead(user: UserSession, messageId: string) {
+    const client = this.databaseService.getClient();
+    await client.query(
+      `UPDATE direct_messages SET is_read = TRUE WHERE id = $1 AND recipient_id = $2`,
+      [messageId, user.id],
+    );
+    return { ok: true };
   }
 
   private async toTicket(ticket: TicketRow) {
