@@ -45,9 +45,11 @@ type TypedSocket = Socket<
   namespace: '/realtime',
   cors: {
     origin: [
+      'https://aris.up.railway.app',
       process.env.CORS_DEV,
       process.env.CORS_ORIGIN,
       process.env.CORS_UBUNTU,
+      process.env.CORS_WEB,
     ],
     credentials: true,
   },

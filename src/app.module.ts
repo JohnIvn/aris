@@ -19,6 +19,7 @@ import { SystemMonitoringModule } from './system-monitoring/system-monitoring.mo
 import { DatabaseManagementModule } from './database-management/database-management.module';
 import { UserSettingsModule } from './user-settings/user-settings.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
     DatabaseManagementModule,
     UserSettingsModule,
     SystemSettingsModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -35,6 +35,7 @@ async function bootstrap() {
         fontSrc: ["'self'", 'https:', 'data:'],
         connectSrc: [
           "'self'",
+          'https://aris.up.railway.app',
           process.env.CORS_DEV || '',
           process.env.CORS_ORIGIN || '',
           process.env.CORS_UBUNTU || '',
@@ -72,6 +73,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
+      'https://aris.up.railway.app',
       process.env.CORS_ORIGIN || '',
       process.env.CORS_DEV || '',
       process.env.CORS_UBUNTU || '',
