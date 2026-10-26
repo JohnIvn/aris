@@ -32,6 +32,7 @@ import { createUserPreferences } from './models/user_preferences.model';
 import { createHardwareEvents } from './models/hardware_events.model';
 import { createSoftwareMonitoring } from './models/software_monitoring.model';
 import { createUserNotifications } from './models/user_notifications.model';
+import { createCurriculumModel } from './models/curriculum.model';
 
 dotenv.config();
 
@@ -125,6 +126,7 @@ export class DatabaseService implements OnModuleInit {
       await createDtrModel(this.pool);
       await createUserPreferences(this.pool);
       await createUserNotifications(this.pool);
+      await createCurriculumModel(this.pool);
       await this.pool.query(`
         ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS phone TEXT;
         ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS phone TEXT;

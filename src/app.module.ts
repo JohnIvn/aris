@@ -20,6 +20,7 @@ import { DatabaseManagementModule } from './database-management/database-managem
 import { UserSettingsModule } from './user-settings/user-settings.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { SupportModule } from './support/support.module';
+import { CurriculumModule } from './curriculum/curriculum.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { SupportModule } from './support/support.module';
     UserSettingsModule,
     SystemSettingsModule,
     SupportModule,
+    CurriculumModule,
   ],
   controllers: [AppController],
   providers: [AppService],
