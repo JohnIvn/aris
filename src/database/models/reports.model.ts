@@ -14,6 +14,8 @@ export default async function createReports(client: Pool) {
         remarks TEXT DEFAULT NULL,
         entries UUID[],
         payroll_availability BOOLEAN DEFAULT FALSE,
+        payroll_received BOOLEAN DEFAULT FALSE,
+        payroll_received_date DATE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )

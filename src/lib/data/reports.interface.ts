@@ -14,6 +14,7 @@ export interface ReportData {
   hr_id: string | null;
   accounting_id: string | null;
   payroll_availability: boolean;
+  payroll_received: boolean;
   created_at: string;
   updated_at: string;
 }

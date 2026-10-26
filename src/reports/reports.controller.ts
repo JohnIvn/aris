@@ -4,6 +4,7 @@ import {
   DefaultValuePipe,
   Get,
   ParseIntPipe,
+  Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -39,6 +40,17 @@ export class ReportsController {
   ) {
     return this.reportsService.fetchReportsForMobile(user, offset, limit);
   }
+
+  @Patch('mobile/payroll')
+  @Roles('professor', 'staff')
+  @UseGuards(JwtCookieGuard)
+  async setPayrollReceived(
+    @Query('report_id') report_id: string,
+    @CurrentUser() user: UserSession,
+  ) {
+    return this.reportsService.setPayrollReceived(report_id, user);
+  }
+
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   async fetchReports(

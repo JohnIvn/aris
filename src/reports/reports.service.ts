@@ -528,6 +528,7 @@ export class ReportsService {
             dtrTally,
             dtrEntries,
             payroll_availability: report.payroll_availability,
+            payroll_received: report.payroll_received,
           };
         }),
       );
@@ -543,6 +544,43 @@ export class ReportsService {
       return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
+
+  async setPayrollReceived(report_id: string, user: UserSession) {
+    try {
+      const user_data = await getUserById(this.db, user.id);
+
+      if (!user_data) {
+        return ErrorHandler('Failed to fetch user data', 404);
+      }
+
+      const report_response = await this.db.query(
+        `
+      UPDATE accomplishment_reports
+      SET payroll_received = TRUE, updated_at = NOW(), payroll_received_date = NOW()
+      WHERE id = $1
+        AND user_id = $2
+      AND payroll_availability = TRUE`,
+        [report_id, user.id],
+      );
+
+      if (report_response.rowCount === 0) {
+        return ErrorHandler(
+          'Report not found or payroll not yet available',
+          404,
+          'Not Found',
+        );
+      }
+
+      return SuccessHandler('Payroll marked as received', 200, { report_id });
+    } catch (error) {
+      if (error instanceof Error) {
+        return ErrorHandler(error.message, 500, error.name);
+      }
+
+      return ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
   private async calculateARTally(ar_entries: ReportEntryData[]) {
     try {
       const entries: ReportEntryData[] = [];
