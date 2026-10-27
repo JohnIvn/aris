@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 import { Roles } from '../lib/decorators/roles.decorator';
 import { SystemMonitoringService } from './system-monitoring.service';
@@ -15,8 +15,8 @@ export class SystemMonitoringController {
   }
 
   @Get('monitoring')
-  getSoftwareMonitoring() {
-    return this.service.getSoftwareMonitoring();
+  getSoftwareMonitoring(@Query('range') range?: string) {
+    return this.service.getSoftwareMonitoring(range);
   }
 
   @Get('logs')
