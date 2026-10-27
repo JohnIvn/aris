@@ -31,6 +31,22 @@ export class StaffService {
     }
   }
 
+  async listRoles() {
+    try {
+      const result = await this.databaseService.getClient().query(`
+        SELECT id, name, code, description, is_active, created_at, updated_at
+          FROM staff_roles
+         WHERE is_active = TRUE
+         ORDER BY id ASC
+      `);
+      return SuccessHandler('Successfully Fetched Staff Roles', 200, result.rows);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500, error.name)
+        : ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
   async create(data: CreateStaffDto) {
     try {
       let email = data.email.trim().toLowerCase();

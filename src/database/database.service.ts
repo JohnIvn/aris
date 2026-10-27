@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import chalk from 'chalk';
 import { createEnumTypes } from './models/enums.model';
+import { createStaffRoles } from './models/staff_roles.model';
 import { createUserProfessors } from './models/user_professor.model';
 import { createUserStaffs } from './models/user_staff.model';
 import { createUserAdmins } from './models/user_admin.model';
@@ -98,6 +99,7 @@ export class DatabaseService implements OnModuleInit {
       console.log(chalk.cyan('Creating tables...'));
 
       await createEnumTypes(this.pool);
+      await createStaffRoles(this.pool);
       await createUserProfessors(this.pool);
       await createUserStaffs(this.pool);
       await createUserAdmins(this.pool);

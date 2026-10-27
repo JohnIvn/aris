@@ -13,6 +13,11 @@ export class StaffController {
     return this.staffService.list();
   }
 
+  @Get('roles')
+  listRoles() {
+    return this.staffService.listRoles();
+  }
+
   @Post()
   create(@Body() data: CreateStaffDto) {
     return this.staffService.create(data);

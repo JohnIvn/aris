@@ -17,7 +17,7 @@ export async function createUserStaffs(client: Pool) {
       birthday DATE DEFAULT NULL,
       age INT DEFAULT NULL,
       gender TEXT DEFAULT NULL,
-      position TEXT DEFAULT NULL,
+      position TEXT DEFAULT NULL REFERENCES staff_roles(name) ON UPDATE CASCADE ON DELETE SET NULL,
       department TEXT DEFAULT NULL,
       provider account_provider DEFAULT 'local',
       is_banned BOOLEAN NOT NULL DEFAULT FALSE,
@@ -25,5 +25,19 @@ export async function createUserStaffs(client: Pool) {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_staffs_position'
+      ) THEN
+        ALTER TABLE user_staffs
+        ADD CONSTRAINT fk_user_staffs_position
+        FOREIGN KEY (position)
+        REFERENCES staff_roles(name)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL;
+      END IF;
+    END $$;
   `);
 }
