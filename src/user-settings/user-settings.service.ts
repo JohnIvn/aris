@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { MultipartFile } from '@fastify/multipart';
 import type { FastifyReply } from 'fastify';
 import { DatabaseService } from '../database/database.service';
@@ -12,6 +14,8 @@ import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 
 @Injectable()
 export class UserSettingsService {
+  private readonly logger = new Logger(UserSettingsService.name);
+
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly loggerService: LoggerService,
@@ -23,6 +27,50 @@ export class UserSettingsService {
 
   private table(user: UserSession) {
     return USER_ROLE_TABLES[user.role];
+  }
+
+  private getSupabase(): SupabaseClient {
+    const url = process.env.SUPABASE_URL ?? process.env.DATABASE_REST_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.DATABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) {
+      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured');
+    }
+
+    return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+  }
+
+  private async getBucketName(supabase: SupabaseClient): Promise<string> {
+    if (process.env.SUPABASE_PHOTO_BUCKET) {
+      return process.env.SUPABASE_PHOTO_BUCKET;
+    }
+    if (process.env.SUPABASE_STORAGE_BUCKET) {
+      return process.env.SUPABASE_STORAGE_BUCKET;
+    }
+    try {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      if (buckets && buckets.length > 0) {
+        const found = buckets.find((b) => b.name === 'photos' || b.name === 'avatars');
+        if (found) return found.name;
+      }
+    } catch {
+      // ignore bucket listing errors
+    }
+    return 'photos';
+  }
+
+  private async ensureBucket(supabase: SupabaseClient, bucketName: string) {
+    try {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const exists = buckets?.some((b) => b.name === bucketName);
+      if (!exists) {
+        await supabase.storage.createBucket(bucketName, {
+          public: true,
+          fileSizeLimit: '6MB',
+        });
+      }
+    } catch {
+      // ignore bucket creation errors
+    }
   }
 
   async getProfile(user: UserSession) {
@@ -111,40 +159,106 @@ export class UserSettingsService {
   }
 
   async savePhoto(user: UserSession, file: MultipartFile) {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowed.includes(file.mimetype)) return this.invalid('Only JPG, PNG, and WEBP photos are supported');
-    const content = await file.toBuffer();
-    const limitResult = await this.db.query<{ setting_value: string }>(
-      `SELECT setting_value FROM system_settings
-       WHERE setting_key = 'maxUploadMb' LIMIT 1`,
-    );
-    const maxUploadMb = Math.min(6, Math.max(1, Number(limitResult.rows[0]?.setting_value ?? 6)));
-    if (content.length > maxUploadMb * 1024 * 1024) {
-      return this.invalid(`Photo must be ${maxUploadMb} MB or smaller`);
+    try {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.mimetype)) {
+        return this.invalid('Only JPG, PNG, and WEBP photos are supported');
+      }
+      const content = await file.toBuffer();
+      const limitResult = await this.db.query<{ setting_value: string }>(
+        `SELECT setting_value FROM system_settings
+         WHERE setting_key = 'maxUploadMb' LIMIT 1`,
+      );
+      const maxUploadMb = Math.min(6, Math.max(1, Number(limitResult.rows[0]?.setting_value ?? 6)));
+      if (content.length > maxUploadMb * 1024 * 1024) {
+        return this.invalid(`Photo must be ${maxUploadMb} MB or smaller`);
+      }
+
+      const supabase = this.getSupabase();
+      const bucket = await this.getBucketName(supabase);
+      await this.ensureBucket(supabase, bucket);
+
+      const extension = file.mimetype.split('/')[1] === 'jpeg' ? 'jpg' : file.mimetype.split('/')[1];
+      const filename = `${user.id}.${extension}`;
+
+      // Clean up previous files with different extensions for this user
+      const possibleExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+      const filesToRemove = possibleExtensions
+        .filter((ext) => ext !== extension)
+        .map((ext) => `${user.id}.${ext}`);
+      try {
+        await supabase.storage.from(bucket).remove(filesToRemove);
+      } catch {
+        // ignore cleanup error
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(filename, content, {
+          contentType: file.mimetype,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        this.logger.error(`Failed to upload photo to Supabase storage: ${uploadError.message}`);
+        return this.invalid(`Photo upload failed: ${uploadError.message}`, 500);
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filename);
+      const photoUrl = `${publicUrlData.publicUrl}?rev=${Date.now()}`;
+
+      await this.db.query(
+        `UPDATE ${this.table(user)} SET avatar_url = $1, updated_at = NOW() WHERE id = $2`,
+        [photoUrl, user.id],
+      );
+
+      return SuccessHandler('Photo updated successfully', 200, { avatar_url: photoUrl });
+    } catch (error) {
+      return this.error(error);
     }
-    const extension = file.mimetype.split('/')[1];
-    const directory = join(process.cwd(), 'uploads', 'photos');
-    const filename = `${user.id}.${extension}`;
-    await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, filename), content);
-    const url = `/users/me/photo?rev=${Date.now()}`;
-    await this.db.query(
-      `UPDATE ${this.table(user)} SET avatar_url = $1, updated_at = NOW() WHERE id = $2`,
-      [url, user.id],
-    );
-    return SuccessHandler('Photo updated successfully', 200, { avatar_url: url });
   }
 
   async sendPhoto(user: UserSession, reply: FastifyReply) {
-    const result = await this.db.query<{ avatar_url: string | null }>(
-      `SELECT avatar_url FROM ${this.table(user)} WHERE id = $1`,
-      [user.id],
-    );
-    const url = result.rows[0]?.avatar_url;
-    if (!url) return reply.code(404).send({ message: 'Photo not found' });
-    const extension = url.split('?')[0].split('.').pop();
-    const content = await readFile(join(process.cwd(), 'uploads', 'photos', `${user.id}.${extension}`));
-    return reply.type(`image/${extension}`).send(content);
+    try {
+      const result = await this.db.query<{ avatar_url: string | null }>(
+        `SELECT avatar_url FROM ${this.table(user)} WHERE id = $1`,
+        [user.id],
+      );
+      const url = result.rows[0]?.avatar_url;
+      if (!url) return reply.code(404).send({ message: 'Photo not found' });
+
+      // If it's a full URL (Supabase public URL or OAuth provider image), redirect to it
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return reply.redirect(url, 302);
+      }
+
+      // If an existing local file exists on disk (backwards compatibility), serve it
+      const extension = url.split('?')[0].split('.').pop();
+      const localPath = join(process.cwd(), 'uploads', 'photos', `${user.id}.${extension}`);
+      if (existsSync(localPath)) {
+        const content = await readFile(localPath);
+        return reply.type(`image/${extension}`).send(content);
+      }
+
+      // Otherwise attempt to download from Supabase storage bucket
+      const supabase = this.getSupabase();
+      const bucket = await this.getBucketName(supabase);
+      const { data: files } = await supabase.storage.from(bucket).list('', {
+        search: user.id,
+      });
+      const file = files?.find((f) => f.name.startsWith(user.id));
+      if (!file) return reply.code(404).send({ message: 'Photo not found' });
+
+      const { data, error } = await supabase.storage.from(bucket).download(file.name);
+      if (error || !data) return reply.code(404).send({ message: 'Photo not found' });
+
+      const buffer = Buffer.from(await data.arrayBuffer());
+      return reply.type(data.type || `image/${extension}`).send(buffer);
+    } catch (error) {
+      return reply.code(500).send({
+        message: error instanceof Error ? error.message : 'Server Error',
+      });
+    }
   }
 
   invalid(message: string, status = 400) {
