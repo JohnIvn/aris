@@ -21,6 +21,7 @@ import { UserSettingsModule } from './user-settings/user-settings.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { SupportModule } from './support/support.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
+import { ApprovalsModule } from './approvals/approvals.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { CurriculumModule } from './curriculum/curriculum.module';
     SystemSettingsModule,
     SupportModule,
     CurriculumModule,
+    ApprovalsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
