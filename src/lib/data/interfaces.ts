@@ -4,4 +4,5 @@ export interface UserSession {
   id: string;
   email: string;
   role: UserRoles;
+  position?: string;
 }

@@ -31,10 +31,11 @@ export class JwtCookieGuard implements CanActivate {
       throw new UnauthorizedException('Invalid token');
     }
 
-    req.user = {
+    (req as any).user = {
       id: payload.id,
       email: payload.email,
       role: payload.role,
+      position: payload.position,
     };
 
     return true;

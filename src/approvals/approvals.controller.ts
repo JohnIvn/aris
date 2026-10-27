@@ -18,8 +18,8 @@ export class ApprovalsController {
   constructor(private readonly approvalsService: ApprovalsService) {}
 
   @Get()
-  list() {
-    return this.approvalsService.listApprovals();
+  list(@CurrentUser() user: UserSession) {
+    return this.approvalsService.listApprovals(user);
   }
 
   @Put()

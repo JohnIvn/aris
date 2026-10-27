@@ -110,8 +110,27 @@ export class ApprovalsService {
     return this.databaseService.getClient();
   }
 
-  async listApprovals() {
+  async listApprovals(user?: UserSession) {
     try {
+      // Determine staff position/role to scope submissions if user is staff
+      let staffRole: StageRole | null = null;
+      if (user?.role === 'staff') {
+        let pos = user.position;
+        if (!pos && user.id) {
+          const staffRes = await this.client.query(
+            'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
+            [user.id],
+          );
+          pos = staffRes.rows[0]?.position;
+        }
+        if (pos) {
+          const lower = pos.trim().toLowerCase();
+          if (lower.includes('check')) staffRole = 'Checker';
+          else if (lower.includes('sec')) staffRole = 'Secretary';
+          else if (lower.includes('hr') || lower.includes('human')) staffRole = 'HR';
+          else if (lower.includes('account') || lower.includes('payroll')) staffRole = 'Accounting';
+        }
+      }
       // 1. Fetch approval stages
       const stagesRes = await this.client.query(`
         SELECT id, stage_key, label, stage_order, is_active
@@ -400,7 +419,8 @@ export class ApprovalsService {
         });
       });
 
-      return SuccessHandler('Approvals fetched successfully', 200, items);
+      const scopedItems = staffRole ? items.filter((it) => it.stage === staffRole) : items;
+      return SuccessHandler('Approvals fetched successfully', 200, scopedItems);
     } catch (error) {
       if (error instanceof Error) {
         return ErrorHandler(error.message, 500, error.name);

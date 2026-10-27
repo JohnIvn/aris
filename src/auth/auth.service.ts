@@ -57,6 +57,8 @@ export class AuthService {
       email: user.email,
       name: [user.firstname, user.lastname].filter(Boolean).join(' '),
       role: user.role,
+      position: user.position,
+      department: user.department,
       avatar_url: user.avatar_url,
       username: user.username,
       firstname: user.firstname,
@@ -74,6 +76,10 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: user.role,
+        position: user.position,
+        department: user.department,
+      position: user.position,
+      department: user.department,
       },
       {
         secret: process.env.JWT_SECRET!,
@@ -201,6 +207,8 @@ export class AuthService {
           action_status: 'failure',
           auth_action: 'signin',
           role: user.role,
+      position: user.position,
+      department: user.department,
           user_id: user.id,
           metadata: { name: failName, email: user.email, reason: 'Incorrect password' },
         });
@@ -223,6 +231,8 @@ export class AuthService {
         action_status: 'success',
         auth_action: 'signin',
         role: user.role,
+      position: user.position,
+      department: user.department,
         user_id: user.id,
         metadata: { name: successName, email: user.email },
       });
@@ -387,6 +397,8 @@ export class AuthService {
         action_status: 'success',
         auth_action: 'signup',
         role: user.role,
+      position: user.position,
+      department: user.department,
         user_id: user.id,
         metadata: {
           email: email,
@@ -422,6 +434,8 @@ export class AuthService {
         action_status: 'success',
         auth_action: 'signout',
         role: user.role,
+      position: user.position,
+      department: user.department,
         user_id: user.id,
         metadata: { name: user.email, email: user.email, token: token ?? null },
       });
