@@ -482,6 +482,35 @@ export class ReportsService {
 
       const reports = report_response.rows;
 
+      // One query for all entries of the fetched reports, grouped by report_id
+      const entriesByReport = new Map<string, ReportEntryData[]>();
+
+      if (reports.length > 0) {
+        const entries_response = await this.db.query<ReportEntryData>(
+          `
+        SELECT *
+        FROM report_entries
+        WHERE report_id = ANY($1::uuid[])
+        ORDER BY class_date ASC, shift_start ASC
+        `,
+          [reports.map((r) => r.id)],
+        );
+
+        for (const entry of entries_response.rows) {
+          const list = entriesByReport.get(entry.report_id) ?? [];
+          list.push(entry);
+          entriesByReport.set(entry.report_id, list);
+        }
+      }
+
+      const professorName = [
+        user_data.firstname,
+        user_data.middlename,
+        user_data.lastname,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
       const formatted = await Promise.all(
         reports.map(async (report) => {
           const periodStart = new Date(report.period_start);
@@ -493,8 +522,11 @@ export class ReportsService {
             `${periodEnd.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ` +
             `${periodEnd.getUTCDate().toString().padStart(2, '0')}`;
 
-          const [arTally, dtrTally, dtrEntries] = await Promise.all([
-            this.calculateARTally(report.entries ?? []),
+          const arTally = this.calculateARTally(
+            entriesByReport.get(report.id) ?? [],
+          );
+
+          const [dtrTally, dtrEntries] = await Promise.all([
             this.calculateDTRTally(
               user.id,
               report.period_start,
@@ -506,19 +538,12 @@ export class ReportsService {
               report.period_end,
             ),
           ]);
-
           return {
             id: report.id,
             periodLabel,
             stage: report.approval_stage,
             updatedAt: report.updated_at,
-            professorName: [
-              user_data.firstname,
-              user_data.middlename,
-              user_data.lastname,
-            ]
-              .filter(Boolean)
-              .join(' '),
+            professorName,
             professorId: user_data.employee_id,
             department: user_data.department,
             position: user_data.position,
@@ -581,41 +606,12 @@ export class ReportsService {
     }
   }
 
-  private async calculateARTally(ar_entries: ReportEntryData[]) {
-    try {
-      const entries: ReportEntryData[] = [];
-
-      for (const eid of ar_entries) {
-        const response = await this.db.query(
-          `
-        SELECT *
-        FROM report_entries
-        WHERE id = $1
-        `,
-          [eid],
-        );
-
-        if (response.rowCount === 0) {
-          continue;
-        }
-
-        entries.push(response.rows[0] as ReportEntryData);
-      }
-
-      const total_hours = this.calculateARHrTally(entries);
-
-      return {
-        entries,
-        total: entries.length,
-        total_hours,
-      };
-    } catch (error) {
-      if (error instanceof Error) {
-        return ErrorHandler(error.message, 500, error.name);
-      }
-
-      return ErrorHandler('Server Error', 500, 'Unknown Error');
-    }
+  private calculateARTally(entries: ReportEntryData[]) {
+    return {
+      entries,
+      total: entries.length,
+      total_hours: this.calculateARHrTally(entries),
+    };
   }
 
   private async calculateDTRTally(
