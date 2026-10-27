@@ -4,6 +4,19 @@ import { LoggerAdminDto, LoggerAuthDto, LoggerUserDto } from './dto/logger.dto';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { AdminLog, UserLog } from '../lib/data/logger.interface';
 
+export type SystemLogKind = 'auth' | 'security' | 'alert';
+
+export interface SystemLogEntry {
+  actor_user_id?: string | null;
+  actor_label: string;
+  kind: SystemLogKind;
+  event: string;
+  detail?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  session_id?: string | null;
+}
+
 @Injectable()
 export class LoggerService {
   constructor(private readonly databaseService: DatabaseService) {}
@@ -17,6 +30,44 @@ export class LoggerService {
       return ErrorHandler(error.message, 500, error.name);
     }
     return ErrorHandler('Server Error', 500, 'Unknown Error');
+  }
+
+  /**
+   * General system-wide access and security audit logs stored in `system_logs`.
+   */
+  async logSystemEvent(entry: SystemLogEntry) {
+    try {
+      await this.db.query(
+        `
+        INSERT INTO system_logs (
+          actor_user_id,
+          actor_label,
+          kind,
+          event,
+          detail,
+          ip_address,
+          user_agent,
+          session_id,
+          occurred_at
+        ) VALUES ($1, $2, $3::log_kind, $4, $5, $6, $7, $8, NOW())
+        `,
+        [
+          entry.actor_user_id ?? null,
+          entry.actor_label,
+          entry.kind,
+          entry.event,
+          entry.detail ?? null,
+          entry.ip_address ?? null,
+          entry.user_agent ?? null,
+          entry.session_id ?? null,
+        ],
+      );
+    } catch (error) {
+      console.error(
+        '[SYSTEM LOGGING ERROR]',
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
   /**
@@ -128,12 +179,54 @@ export class LoggerService {
 
   /**
    * Authentication actions (signin/signup/signout). Routed by role:
-   * admins are recorded in `admin_logs`, staff/professors in `user_logs`.
-   * The auth action is stored in the `auth_action` column.
+   * Recorded in `system_logs` for universal visibility, and also in
+   * `admin_logs` / `user_logs` for legacy/granular audit tables.
    */
   async logAuthAction(data: LoggerAuthDto) {
     const { auth_action, action_status, user_id, role, metadata } = data;
+    const meta = (metadata as Record<string, any>) || {};
 
+    // 1. Record into system_logs
+    const actorLabel =
+      meta.name ||
+      meta.email ||
+      (role === 'admin'
+        ? 'Administrator'
+        : role
+          ? `${role.charAt(0).toUpperCase() + role.slice(1)}`
+          : 'Unknown');
+
+    let kind: SystemLogKind = 'auth';
+    let event = 'Signed in';
+    let detail = `${meta.provider ? `${meta.provider} · ` : 'Web · '}${meta.email || actorLabel}`;
+
+    if (auth_action === 'signout') {
+      kind = 'auth';
+      event = 'Signed out';
+      detail = 'Session ended by user';
+    } else if (action_status === 'failure') {
+      kind = 'alert';
+      event = 'Failed sign-in';
+      detail = meta.reason
+        ? `${meta.reason} · ${meta.email || 'Unknown'}`
+        : `Failed sign-in attempt · ${meta.email || 'Unknown'}`;
+    } else if (auth_action === 'signup') {
+      kind = 'security';
+      event = 'Account registered';
+      detail = `New user account created · ${meta.email || actorLabel}`;
+    }
+
+    void this.logSystemEvent({
+      actor_user_id: user_id ?? null,
+      actor_label: actorLabel,
+      kind,
+      event,
+      detail,
+      ip_address: meta.ip || null,
+      user_agent: meta.userAgent || null,
+    });
+
+    // 2. Legacy admin / user logs
     if (role === 'admin') {
       if (!user_id) {
         return SuccessHandler('Skipped anonymous auth log', 200, null);

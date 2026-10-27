@@ -4,12 +4,14 @@ import { DatabaseService } from '../database/database.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { CreateProfessorDto, UpdateProfessorDto } from './dto/professor.dto';
 import { OAuthService } from '../auth/oauth.service';
+import { LoggerService } from '../logger/logger.service';
 
 @Injectable()
 export class ProfessorsService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly oauthService: OAuthService,
+    private readonly loggerService: LoggerService,
   ) {}
 
   async fetchProfessors() {
@@ -71,6 +73,12 @@ export class ProfessorsService {
           data.active === false,
         ],
       );
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'security',
+        event: 'Added Professor',
+        detail: `Created professor ${firstname} ${lastname} (${email})${data.department ? ` · ${data.department}` : ''}`,
+      });
       return SuccessHandler('Successfully Created Professor', 201, result.rows[0]);
     } catch (error) {
       return error instanceof Error
@@ -131,6 +139,12 @@ export class ProfessorsService {
         ],
       );
 
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'security',
+        event: 'Modified Professor',
+        detail: `Updated professor ${firstname} ${lastname} (${email})`,
+      });
       return SuccessHandler('Successfully Updated Professor', 200, result.rows[0]);
     } catch (error) {
       return error instanceof Error
@@ -149,6 +163,12 @@ export class ProfessorsService {
         [!active, id],
       );
       if (!result.rowCount) return ErrorHandler('Professor not found', 404);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: active ? 'security' : 'alert',
+        event: active ? 'Activated Professor' : 'Deactivated Professor',
+        detail: `${active ? 'Restored access for' : 'Deactivated/banned access for'} professor ID ${id}`,
+      });
       return SuccessHandler(
         'Successfully Updated Professor Status',
         200,
@@ -168,6 +188,12 @@ export class ProfessorsService {
         [id],
       );
       if (!result.rowCount) return ErrorHandler('Professor not found', 404);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'alert',
+        event: 'Deleted Professor',
+        detail: `Permanently deleted professor record (${id})`,
+      });
       return SuccessHandler('Successfully Deleted Professor', 200, result.rows[0]);
     } catch (error) {
       return error instanceof Error

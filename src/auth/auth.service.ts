@@ -103,7 +103,7 @@ export class AuthService {
           auth_action: 'signin',
           role: undefined,
           user_id: undefined,
-          metadata: {},
+          metadata: { email: (user && user.email) || 'Unknown', reason: 'Account does not exist' },
         });
         return ErrorHandler('User Not Found', 404, userData);
       }
@@ -119,12 +119,13 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
+      const fullName = [userData.firstname, userData.lastname].filter(Boolean).join(' ') || userData.username || userData.email;
       this.recordAuthLog({
         action_status: 'success',
         auth_action: 'signin',
         role: userData.role,
         user_id: userData.id,
-        metadata: {},
+        metadata: { name: fullName, email: userData.email },
       });
 
       return SuccessHandler('Successfully Signed In', 200, {
@@ -195,12 +196,13 @@ export class AuthService {
       const verifyPassword = await argon2.verify(user.password_hash, password);
 
       if (!verifyPassword) {
+        const failName = [user.firstname, user.lastname].filter(Boolean).join(' ') || user.username || user.email;
         this.recordAuthLog({
           action_status: 'failure',
           auth_action: 'signin',
           role: user.role,
           user_id: user.id,
-          metadata: {},
+          metadata: { name: failName, email: user.email, reason: 'Incorrect password' },
         });
         return ErrorHandler('Incorrect Password', 406, []);
       }
@@ -216,12 +218,13 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
+      const successName = [user.firstname, user.lastname].filter(Boolean).join(' ') || user.username || user.email;
       this.recordAuthLog({
         action_status: 'success',
         auth_action: 'signin',
         role: user.role,
         user_id: user.id,
-        metadata: {},
+        metadata: { name: successName, email: user.email },
       });
 
       return SuccessHandler('Successfully Signed In', 200, {
@@ -420,9 +423,7 @@ export class AuthService {
         auth_action: 'signout',
         role: user.role,
         user_id: user.id,
-        metadata: {
-          token: token ?? null,
-        },
+        metadata: { name: user.email, email: user.email, token: token ?? null },
       });
 
       return SuccessHandler('Successfully Signed Out', 200, null);

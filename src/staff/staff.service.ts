@@ -4,12 +4,14 @@ import { DatabaseService } from '../database/database.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { CreateStaffDto, UpdateStaffDto } from './staff.dto';
 import { OAuthService } from '../auth/oauth.service';
+import { LoggerService } from '../logger/logger.service';
 
 @Injectable()
 export class StaffService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly oauthService: OAuthService,
+    private readonly loggerService: LoggerService,
   ) {}
 
   async list() {
@@ -70,6 +72,12 @@ export class StaffService {
           data.provider ?? 'local',
         ],
       );
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'security',
+        event: 'Added Staff Member',
+        detail: `Created staff member ${firstname} ${lastname} (${email})${data.position ? ` · ${data.position}` : ''}`,
+      });
       return SuccessHandler('Successfully Created Staff', 201, result.rows[0]);
     } catch (error) {
       return error instanceof Error
@@ -130,6 +138,12 @@ export class StaffService {
         ],
       );
 
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'security',
+        event: 'Modified Staff Member',
+        detail: `Updated staff member ${firstname} ${lastname} (${email})`,
+      });
       return SuccessHandler('Successfully Updated Staff Member', 200, result.rows[0]);
     } catch (error) {
       return error instanceof Error
@@ -148,6 +162,12 @@ export class StaffService {
         [!active, id],
       );
       if (!result.rowCount) return ErrorHandler('Staff member not found', 404);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: active ? 'security' : 'alert',
+        event: active ? 'Activated Staff' : 'Deactivated Staff',
+        detail: `${active ? 'Restored access for' : 'Deactivated/banned access for'} staff ID ${id}`,
+      });
       return SuccessHandler('Successfully Updated Staff Status', 200, result.rows[0]);
     } catch (error) {
       return error instanceof Error
@@ -163,6 +183,12 @@ export class StaffService {
         [id],
       );
       if (!result.rowCount) return ErrorHandler('Staff member not found', 404);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'alert',
+        event: 'Deleted Staff Member',
+        detail: `Permanently deleted staff record (${id})`,
+      });
       return SuccessHandler('Successfully Deleted Staff Member', 200, result.rows[0]);
     } catch (error) {
       return error instanceof Error

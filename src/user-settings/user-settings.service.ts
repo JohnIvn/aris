@@ -5,13 +5,17 @@ import { join } from 'node:path';
 import type { MultipartFile } from '@fastify/multipart';
 import type { FastifyReply } from 'fastify';
 import { DatabaseService } from '../database/database.service';
+import { LoggerService } from '../logger/logger.service';
 import type { UserSession } from '../lib/data/interfaces';
 import { USER_ROLE_TABLES } from '../lib/data/types';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 
 @Injectable()
 export class UserSettingsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly loggerService: LoggerService,
+  ) {}
 
   private get db() {
     return this.databaseService.getClient();

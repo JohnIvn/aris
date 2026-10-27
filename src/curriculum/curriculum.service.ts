@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import {
   CreateCourseDto,
@@ -12,7 +13,10 @@ import {
 
 @Injectable()
 export class CurriculumService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly loggerService: LoggerService,
+  ) {}
 
   private get client() {
     return this.databaseService.getClient();
@@ -203,6 +207,12 @@ export class CurriculumService {
       }
 
       await this.client.query('DELETE FROM departments WHERE id = $1', [id]);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'alert',
+        event: 'Deleted Department',
+        detail: `Deleted department (${id})`,
+      });
       return SuccessHandler('Department deleted successfully', 200, { id });
     } catch (error) {
       return error instanceof Error
@@ -335,6 +345,12 @@ export class CurriculumService {
       }
 
       await this.client.query('DELETE FROM academic_ranks WHERE id = $1', [id]);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'alert',
+        event: 'Deleted Academic Rank',
+        detail: `Deleted academic rank (${id})`,
+      });
       return SuccessHandler('Academic rank deleted successfully', 200, { id });
     } catch (error) {
       return error instanceof Error
@@ -444,6 +460,12 @@ export class CurriculumService {
       }
 
       await this.client.query('DELETE FROM curriculum_courses WHERE id = $1', [id]);
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'alert',
+        event: 'Deleted Course',
+        detail: `Deleted course (${id})`,
+      });
       return SuccessHandler('Course deleted successfully', 200, { id });
     } catch (error) {
       return error instanceof Error

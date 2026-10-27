@@ -83,28 +83,68 @@ export class SystemMonitoringService {
   async getSystemLogs() {
     try {
       const result = await this.db.query(
-        `SELECT id, actor_label, event, detail, ip_address, occurred_at, kind
-         FROM system_logs
-         ORDER BY occurred_at DESC
+        `SELECT
+           sl.id,
+           sl.actor_user_id,
+           COALESCE(
+             NULLIF(TRIM(CONCAT(ua.firstname, ' ', ua.lastname)), ''),
+             NULLIF(TRIM(CONCAT(up.firstname, ' ', up.lastname)), ''),
+             NULLIF(TRIM(CONCAT(us.firstname, ' ', us.lastname)), ''),
+             NULLIF(sl.actor_label, ''),
+             'System'
+           ) AS actor_name,
+           COALESCE(
+             ua.email,
+             up.email,
+             us.email,
+             CASE WHEN sl.actor_label LIKE '%@%' THEN sl.actor_label ELSE NULL END
+           ) AS actor_email,
+           sl.actor_label,
+           sl.event,
+           sl.detail,
+           sl.ip_address,
+           sl.user_agent,
+           sl.session_id,
+           sl.occurred_at,
+           sl.kind
+         FROM system_logs sl
+         LEFT JOIN user_admins ua ON (sl.actor_user_id = ua.id OR (sl.actor_label IS NOT NULL AND LOWER(sl.actor_label) = LOWER(ua.email)))
+         LEFT JOIN user_professors up ON (sl.actor_user_id = up.id OR (sl.actor_label IS NOT NULL AND LOWER(sl.actor_label) = LOWER(up.email)))
+         LEFT JOIN user_staffs us ON (sl.actor_user_id = us.id OR (sl.actor_label IS NOT NULL AND LOWER(sl.actor_label) = LOWER(us.email)))
+         ORDER BY sl.occurred_at DESC
          LIMIT 200`,
       );
 
-      return result.rows.map((row) => ({
-        id: row.id,
-        actor: row.actor_label,
-        init: row.actor_label
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((part: string) => part[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase(),
-        event: row.event,
-        detail: row.detail ?? '—',
-        ip: row.ip_address ?? '—',
-        time: new Date(row.occurred_at).toISOString(),
-        kind: row.kind.charAt(0).toUpperCase() + row.kind.slice(1),
-      }));
+      return SuccessHandler(
+        'Successfully fetched system logs',
+        200,
+        result.rows.map((row) => {
+          const displayName = row.actor_name || row.actor_label || 'System';
+          const email = row.actor_email || (row.actor_label && row.actor_label.includes('@') ? row.actor_label : null);
+          return {
+            id: row.id,
+            name: displayName,
+            actor: displayName,
+            email: email,
+            actorLabel: row.actor_label,
+            actorUserId: row.actor_user_id ?? null,
+            init: displayName
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((part) => part[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase(),
+            event: row.event,
+            detail: row.detail ?? '—',
+            ip: row.ip_address ?? '—',
+            userAgent: row.user_agent ?? null,
+            sessionId: row.session_id ?? null,
+            time: new Date(row.occurred_at).toISOString(),
+            kind: row.kind.charAt(0).toUpperCase() + row.kind.slice(1),
+          };
+        }),
+      );
     } catch (error) {
       return this.error(error);
     }

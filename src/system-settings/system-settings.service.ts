@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { LoggerService } from '../logger/logger.service';
 import type { UserSession } from '../lib/data/interfaces';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 
@@ -19,7 +20,10 @@ export class SystemSettingsService {
     maxUploadMb: 6,
   };
 
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly loggerService: LoggerService,
+  ) {}
 
   private get db() {
     return this.databaseService.getClient();

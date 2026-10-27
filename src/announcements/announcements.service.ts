@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { UserSession } from '../lib/data/interfaces';
 import {
@@ -25,7 +26,10 @@ interface AnnouncementRow {
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly loggerService: LoggerService,
+  ) {}
 
   private get db() {
     return this.databaseService.getClient();
@@ -135,6 +139,13 @@ export class AnnouncementsService {
         ],
       );
 
+      void this.loggerService.logSystemEvent({
+        actor_label: user?.email || 'Administrator',
+        actor_user_id: user?.id,
+        kind: 'security',
+        event: 'Published Announcement',
+        detail: `${data.title} · Audience: ${data.audience}`,
+      });
       return SuccessHandler(
         'Announcement published successfully',
         201,
@@ -205,6 +216,12 @@ export class AnnouncementsService {
         ],
       );
 
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'security',
+        event: 'Modified Announcement',
+        detail: `Updated announcement: ${title}`,
+      });
       return SuccessHandler(
         'Announcement updated successfully',
         200,
@@ -254,6 +271,12 @@ export class AnnouncementsService {
       if (result.rowCount === 0) {
         return ErrorHandler('Announcement not found', 404);
       }
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Administrator',
+        kind: 'alert',
+        event: 'Deleted Announcement',
+        detail: `Deleted announcement broadcast (${id})`,
+      });
       return SuccessHandler('Announcement deleted successfully', 200, { id });
     } catch (error) {
       return ErrorHandler(
