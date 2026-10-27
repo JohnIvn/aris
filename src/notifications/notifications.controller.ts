@@ -31,6 +31,19 @@ export class NotificationsController {
     );
   }
 
+  @Get('mobile')
+  listMobile(
+    @CurrentUser() user: UserSession,
+    @Query('offset') offset = '0',
+    @Query('limit') limit = '20',
+  ) {
+    return this.notificationsService.fetchMobileNotificationByUser(
+      user.id,
+      Math.max(0, Number(offset) || 0),
+      Math.min(100, Math.max(1, Number(limit) || 20)),
+    );
+  }
+
   @Patch('read-all')
   markAllRead(@CurrentUser() user: UserSession) {
     return this.notificationsService.markAllReadByUser(user.id);

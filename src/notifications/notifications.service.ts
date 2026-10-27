@@ -388,7 +388,7 @@ export class NotificationsService {
         title: a.title,
         description: a.body,
         body: a.body,
-        type: 'performance_notification' as NotificationType,
+        type: 'performance_notification',
         report_id: null,
         is_read: false,
         pinned: a.is_pinned,
@@ -403,6 +403,36 @@ export class NotificationsService {
         'Successfully fetched user notifications',
         200,
         combined,
+      );
+    } catch (error) {
+      if (error instanceof Error) return ErrorHandler(error.message, 500);
+      return ErrorHandler('Internal Server Error', 500);
+    }
+  }
+
+  async fetchMobileNotificationByUser(
+    userId: string,
+    offset?: number,
+    limit?: number,
+  ) {
+    try {
+      const safeOffset = Math.max(Math.trunc(Number(offset)) || 0, 0);
+      const safeLimit = Math.min(
+        Math.max(Math.trunc(Number(limit)) || 20, 1),
+        100,
+      );
+
+      const res = await this.db.query<Notification>(
+        `SELECT * FROM user_notifications
+         WHERE professor_id = $1 OR staff_id = $1
+         ORDER BY created_at DESC
+         OFFSET $2 LIMIT $3`,
+        [userId, safeOffset, safeLimit],
+      );
+      return SuccessHandler(
+        'Successfully fetched user notifications',
+        200,
+        res.rows,
       );
     } catch (error) {
       if (error instanceof Error) return ErrorHandler(error.message, 500);
