@@ -30,6 +30,14 @@ export class LoggerAuthDto {
   @IsOptional()
   role?: UserRoles;
 
+  @IsString()
+  @IsOptional()
+  position?: string;
+
+  @IsString()
+  @IsOptional()
+  department?: string;
+
   @IsJSON()
   @IsOptional()
   metadata?: Record<string, any>;

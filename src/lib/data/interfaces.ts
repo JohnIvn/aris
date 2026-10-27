@@ -5,4 +5,5 @@ export interface UserSession {
   email: string;
   role: UserRoles;
   position?: string;
+  department?: string;
 }

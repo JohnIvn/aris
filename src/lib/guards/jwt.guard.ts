@@ -36,6 +36,7 @@ export class JwtCookieGuard implements CanActivate {
       email: payload.email,
       role: payload.role,
       position: payload.position,
+      department: payload.department,
     };
 
     return true;

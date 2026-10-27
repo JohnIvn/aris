@@ -74,6 +74,8 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'https://aris.up.railway.app',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
       process.env.CORS_ORIGIN || '',
       process.env.CORS_DEV || '',
       process.env.CORS_UBUNTU || '',

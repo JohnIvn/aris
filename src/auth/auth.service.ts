@@ -78,8 +78,6 @@ export class AuthService {
         role: user.role,
         position: user.position,
         department: user.department,
-      position: user.position,
-      department: user.department,
       },
       {
         secret: process.env.JWT_SECRET!,
