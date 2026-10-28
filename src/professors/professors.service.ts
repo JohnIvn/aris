@@ -107,6 +107,11 @@ export class ProfessorsService {
       const phone = data.phone !== undefined ? (data.phone?.trim() || null) : (current.phone || null);
       const address = data.address !== undefined ? (data.address?.trim() || null) : (current.address || null);
 
+      let passwordHash = current.password_hash;
+      if (data.password && data.password.trim()) {
+        passwordHash = await argon2.hash(data.password.trim());
+      }
+
       const result = await this.databaseService.getClient().query(
         `UPDATE user_professors
             SET employee_id = $1,
@@ -119,8 +124,9 @@ export class ProfessorsService {
                 is_banned = $8,
                 phone = $9,
                 address = $10,
+                password_hash = $11,
                 updated_at = NOW()
-          WHERE id = $11
+          WHERE id = $12
           RETURNING id, employee_id, username, firstname, middlename, lastname, email,
                     avatar_url, birthday, age, gender, position, department, provider,
                     is_banned, phone, address, created_at, updated_at`,
@@ -135,6 +141,7 @@ export class ProfessorsService {
           isBanned,
           phone,
           address,
+          passwordHash,
           id,
         ],
       );
@@ -143,7 +150,7 @@ export class ProfessorsService {
         actor_label: 'Administrator',
         kind: 'security',
         event: 'Modified Professor',
-        detail: `Updated professor ${firstname} ${lastname} (${email})`,
+        detail: `Updated details${data.password ? ' and password' : ''} for ${firstname} ${lastname} (${email})`,
       });
       return SuccessHandler('Successfully Updated Professor', 200, result.rows[0]);
     } catch (error) {

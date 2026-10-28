@@ -124,4 +124,10 @@ export class UpdateProfessorDto {
   @IsString()
   @IsOptional()
   address?: string;
+
+  @IsString()
+  @IsOptional()
+  @MinLength(8)
+  @MaxLength(100)
+  password?: string;
 }
