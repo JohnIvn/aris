@@ -22,6 +22,7 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { SupportModule } from './support/support.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { ApprovalsModule } from './approvals/approvals.module';
+import { BiometricsModule } from './biometrics/biometrics.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ApprovalsModule } from './approvals/approvals.module';
     SupportModule,
     CurriculumModule,
     ApprovalsModule,
+    BiometricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
