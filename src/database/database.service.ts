@@ -35,6 +35,7 @@ import { createSoftwareMonitoring } from './models/software_monitoring.model';
 import { createUserNotifications } from './models/user_notifications.model';
 import { createCurriculumModel } from './models/curriculum.model';
 import { createDirectMessages } from './models/direct_messages.model';
+import createDtrBiometricsModel from './models/dtr_biometrics.model';
 
 dotenv.config();
 
@@ -131,6 +132,7 @@ export class DatabaseService implements OnModuleInit {
       await createUserNotifications(this.pool);
       await createCurriculumModel(this.pool);
       await createDirectMessages(this.pool);
+      await createDtrBiometricsModel(this.pool);
       await this.pool.query(`
         ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS phone TEXT;
         ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS phone TEXT;
