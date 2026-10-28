@@ -41,7 +41,10 @@ export class PayrollService {
            COALESCE(s.record_type, 'AR') AS type,
            TO_CHAR(r.period_start, 'Mon DD') || ' - ' ||
              TO_CHAR(r.period_end, 'Mon DD, YYYY') AS period,
-           COALESCE(cardinality(r.entries), 0)::int AS units,
+           COALESCE(
+             (SELECT COUNT(*)::int FROM report_entries re WHERE re.report_id = r.id),
+             0
+           ) AS units,
            s.status::text AS status
          FROM submissions s
          JOIN accomplishment_reports r ON r.id = s.report_id
