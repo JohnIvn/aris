@@ -76,8 +76,8 @@ export class UserSettingsService {
   async getProfile(user: UserSession) {
     try {
       const result = await this.db.query(
-        `SELECT id, firstname, lastname, email, avatar_url, position, department,
-                phone, created_at
+        `SELECT id, employee_id, firstname, middlename, lastname, email, avatar_url, position, department,
+                phone, address, provider, created_at
          FROM ${this.table(user)} WHERE id = $1`,
         [user.id],
       );
@@ -90,21 +90,42 @@ export class UserSettingsService {
 
   async updateProfile(user: UserSession, data: Record<string, unknown>) {
     try {
-      const values = {
-        firstname: this.text(data.firstName),
-        lastname: this.text(data.lastName),
-        email: this.text(data.email),
-        phone: this.text(data.phone),
-      };
-      if (!values.firstname || !values.lastname || !values.email) {
+      const firstname = this.text(data.firstname ?? data.firstName);
+      const middlename = this.text(data.middlename ?? data.middleName) || null;
+      const lastname = this.text(data.lastname ?? data.lastName);
+      const email = this.text(data.email).toLowerCase();
+      const phone = this.text(data.phone) || null;
+      const address = this.text(data.address) || null;
+      const department = this.text(data.department) || null;
+      const password = this.text(data.password);
+
+      if (!firstname || !lastname || !email) {
         return this.invalid('First name, last name, and email are required');
       }
+
+      let passwordClause = '';
+      const params: any[] = [firstname, middlename, lastname, email, phone, address, department];
+      if (password && password.length >= 8) {
+        const hash = await argon2.hash(password);
+        params.push(hash);
+        passwordClause = `, password_hash = $${params.length}`;
+      }
+      params.push(user.id);
+
       const result = await this.db.query(
         `UPDATE ${this.table(user)}
-         SET firstname = $1, lastname = $2, email = $3, phone = $4, updated_at = NOW()
-         WHERE id = $5
-         RETURNING id, firstname, lastname, email, avatar_url, phone`,
-        [values.firstname, values.lastname, values.email, values.phone, user.id],
+         SET firstname = $1,
+             middlename = $2,
+             lastname = $3,
+             email = $4,
+             phone = $5,
+             address = $6,
+             department = $7
+             ${passwordClause},
+             updated_at = NOW()
+         WHERE id = $${params.length}
+         RETURNING id, employee_id, firstname, middlename, lastname, email, avatar_url, position, department, phone, address, provider`,
+        params,
       );
       if (!result.rows[0]) return this.invalid('User profile not found', 404);
       return SuccessHandler('Profile updated successfully', 200, result.rows[0]);
