@@ -115,6 +115,21 @@ export class MeetingsService {
         dto.word_count ||
         (transcriptSource ? transcriptSource.split(/\s+/).filter(Boolean).length : 0);
 
+      console.log(`\n================== [ARIS BACKEND TERMINAL] MEETING SAVED ==================`);
+      console.log(`Meeting Code: ${meetingCode}`);
+      console.log(`Duration: ${durationMins}m (${durationSecs}s)`);
+      console.log(`Transcript Lines Received: ${Array.isArray(dto.transcript) ? dto.transcript.length : 0}`);
+      if (Array.isArray(dto.transcript) && dto.transcript.length > 0) {
+        dto.transcript.forEach((t: any, idx: number) => {
+          console.log(`  [${idx + 1}] [${t.t || '??'}] ${t.who || 'Unknown'}: ${t.text || ''}`);
+        });
+      } else {
+        console.log(`Transcript: None received in payload`);
+      }
+      console.log(`Participants: ${JSON.stringify(dto.participants || [])}`);
+      console.log(`Word Count: ${wordCount}`);
+      console.log(`============================================================================\n`);
+
       let status = (dto.status || (dto.transcript ? 'summarized' : 'completed')).toLowerCase();
 
       // Prevent rapid duplicate inserts for the same meeting code within 30 seconds
