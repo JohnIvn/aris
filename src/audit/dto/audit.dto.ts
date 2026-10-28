@@ -19,5 +19,9 @@ export class ListAuditDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
   limit?: number;
 }

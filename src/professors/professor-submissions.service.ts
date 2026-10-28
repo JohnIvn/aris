@@ -3,6 +3,7 @@ import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import type { UserSession } from '../lib/data/interfaces';
+import { AuditService } from '../audit/audit.service';
 
 export interface HistoryRecord {
   id: string;
@@ -107,13 +108,14 @@ export class ProfessorSubmissionsService {
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly loggerService: LoggerService,
+    private readonly auditService: AuditService,
   ) {}
 
   private get client() {
     return this.databaseService.getClient();
   }
 
-  private async resolveProfessor(user?: UserSession, emailQuery?: string) {
+  private async resolveProfessor(user?: UserSession, emailQuery?: string, nameQuery?: string, empIdQuery?: string) {
     const targetEmail = user?.email || emailQuery || null;
     const targetId = user?.id || null;
 
@@ -133,6 +135,23 @@ export class ProfessorSubmissionsService {
       if (res.rows.length > 0) return res.rows[0];
     }
 
+    if (empIdQuery) {
+      const res = await this.client.query(
+        'SELECT * FROM user_professors WHERE employee_id = $1 OR employee_id = $2 LIMIT 1',
+        [empIdQuery, `PROF-${empIdQuery}`],
+      );
+      if (res.rows.length > 0) return res.rows[0];
+    }
+
+    if (nameQuery && nameQuery.trim()) {
+      const cleanName = nameQuery.replace(/^(Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s*/i, '').trim();
+      const res = await this.client.query(
+        'SELECT * FROM user_professors WHERE LOWER(firstname || \' \' || lastname) LIKE LOWER($1) OR LOWER(lastname) LIKE LOWER($2) LIMIT 1',
+        [`%${cleanName}%`, `%${cleanName}%`],
+      );
+      if (res.rows.length > 0) return res.rows[0];
+    }
+
     // Default to first professor in database if no user specified
     const fallback = await this.client.query(
       'SELECT * FROM user_professors ORDER BY created_at ASC LIMIT 1',
@@ -140,297 +159,245 @@ export class ProfessorSubmissionsService {
     return fallback.rows[0] || null;
   }
 
-  async createSubmission(user: UserSession | undefined, data: any) {
+  async createAccomplishmentReport(user: UserSession | undefined, data: any) {
     try {
       const type: 'AR' | 'DTR' = (data.type === 'DTR' || data.recordType?.includes('DTR')) ? 'DTR' : 'AR';
       const reference: string = data.id || data.reference || `${type}-${Date.now()}`;
       const period: string = data.period || 'Current Cycle';
       const units: string = data.units || (type === 'AR' ? '3 courses' : '22 days');
       const dbStatus = toDbStatus(data.status);
-      const titleStatus = toTitleCaseStatus(dbStatus);
       const event: string = data.event || `${type} submitted · ${period}`;
       const recordPayload = data.record || data;
-      const userEmail = user?.email || recordPayload.facultyEmail || null;
+      const userEmail =
+        user?.email ||
+        data.email ||
+        data.facultyEmail ||
+        recordPayload.email ||
+        recordPayload.facultyEmail ||
+        null;
+      const userName =
+        ((user as any)?.name) ||
+        data.facultyName ||
+        data.name ||
+        recordPayload.facultyName ||
+        null;
+      const userEmpId =
+        data.facultyNumber ||
+        data.employee_id ||
+        recordPayload.facultyNumber ||
+        recordPayload.employee_id ||
+        null;
       const topics = recordPayload.topics || null;
       const notes = recordPayload.notes || null;
 
-      const prof = await this.resolveProfessor(user, userEmail);
-      const profId = prof?.id || null;
-      const employeeId = prof?.employee_id || recordPayload.facultyNumber || 'P00001';
+      const prof = await this.resolveProfessor(user, userEmail, userName, userEmpId);
+      const profId = prof?.id || '00000000-0000-0000-0000-000000000001';
+      const employeeId = prof?.employee_id || userEmpId || 'P00001';
+      const facultyNo = recordPayload.facultyNumber || prof?.employee_id || employeeId;
 
       let reportId: string | null = null;
 
-      // Bridge AR to accomplishment_reports & report_entries
-      if (type === 'AR' && profId) {
-        try {
-          const facultyNo = recordPayload.facultyNumber || employeeId;
-          const repRes = await this.client.query(
-            `
-            INSERT INTO accomplishment_reports (
-              user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks
-            ) VALUES (
-              $1, $2, $3, CURRENT_DATE - INTERVAL '14 days', CURRENT_DATE, 'AR-AP-STG-1', $4
-            )
-            RETURNING id;
-            `,
-            [profId, employeeId, facultyNo, notes || 'Submitted from ARIS Desktop'],
-          );
+      // 1. Primary insert directly into accomplishment_reports & report_entries
+      if (type === 'AR') {
+        const repRes = await this.client.query(
+          `
+          INSERT INTO accomplishment_reports (
+            user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, CURRENT_DATE - INTERVAL '14 days', CURRENT_DATE, 'AR-AP-STG-1', $4, NOW(), NOW()
+          )
+          RETURNING id;
+          `,
+          [profId, employeeId, facultyNo, notes || 'Submitted from ARIS Desktop'],
+        );
 
-          reportId = repRes.rows[0]?.id || null;
+        reportId = repRes.rows[0]?.id || null;
 
-          if (reportId && Array.isArray(recordPayload.tables)) {
-            for (const tbl of recordPayload.tables) {
-              const courseTitle = tbl.title || 'General Course';
-              const courseTopics = tbl.topics || recordPayload.topics || 'Course syllabus alignment';
-              const courseTasks = tbl.tasks || recordPayload.tasks || 'Lecture and Discussion, Activity';
-              if (Array.isArray(tbl.rows)) {
-                for (const row of tbl.rows) {
-                  const code = String(row[0] || 'CC 105');
-                  const section = String(row[1] || 'BSIT 2A');
-                  const unitVal = parseInt(row[2], 10) || 3;
-                  const day = String(row[3] || 'Monday');
-                  const timeStr = String(row[4] || '08:00AM–11:00AM');
-                  const campusVal = parseCampus(String(row[5] || 'congress'));
+        if (reportId && Array.isArray(recordPayload.tables)) {
+          for (const tbl of recordPayload.tables) {
+            const courseTitle = tbl.title || 'General Course';
+            const courseTopics = tbl.topics || recordPayload.topics || 'Course syllabus alignment';
+            const courseTasks = tbl.tasks || recordPayload.tasks || 'Lecture and Discussion, Activity';
+            if (Array.isArray(tbl.rows)) {
+              for (const row of tbl.rows) {
+                const code = String(row[0] || 'CC 105');
+                const section = String(row[1] || 'BSIT 2A');
+                const unitVal = parseInt(row[2], 10) || 3;
+                const day = String(row[3] || 'Monday');
+                const timeStr = String(row[4] || '08:00AM–11:00AM');
+                const campusVal = parseCampus(String(row[5] || 'congress'));
 
-                  const [startRaw, endRaw] = timeStr.includes('–')
-                    ? timeStr.split('–')
-                    : timeStr.includes('-')
-                    ? timeStr.split('-')
-                    : [timeStr, '11:00AM'];
+                const [startRaw, endRaw] = timeStr.includes('–')
+                  ? timeStr.split('–')
+                  : timeStr.includes('-')
+                  ? timeStr.split('-')
+                  : [timeStr, '11:00AM'];
 
-                  const shiftStart = parseSqlTime(startRaw, '08:00:00');
-                  const shiftEnd = parseSqlTime(endRaw, '11:00:00');
+                const shiftStart = parseSqlTime(startRaw, '08:00:00');
+                const shiftEnd = parseSqlTime(endRaw, '11:00:00');
 
-                  await this.client.query(
-                    `
-                    INSERT INTO report_entries (
-                      report_id, course, code, program, year, section, units, day,
-                      shift_hours, shift_start, shift_end, campus, class_date, topics, description
-                    ) VALUES (
-                      $1, $2, $3, $4, $5, $6, $7, $8, 3.0, $9, $10,
-                      $11, CURRENT_DATE, $12, $13
-                    )
-                    `,
-                    [
-                      reportId,
-                      courseTitle,
-                      code,
-                      'BSIT',
-                      2,
-                      section,
-                      unitVal,
-                      day,
-                      shiftStart,
-                      shiftEnd,
-                      campusVal,
-                      courseTopics,
-                      courseTasks,
-                    ],
-                  );
-                }
+                await this.client.query(
+                  `
+                  INSERT INTO report_entries (
+                    report_id, course, code, program, year, section, units, day,
+                    shift_hours, shift_start, shift_end, campus, class_date, topics, description
+                  ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, 3.0, $9, $10,
+                    $11, CURRENT_DATE, $12, $13
+                  )
+                  `,
+                  [
+                    reportId,
+                    courseTitle,
+                    code,
+                    'BSIT',
+                    2,
+                    section,
+                    unitVal,
+                    day,
+                    shiftStart,
+                    shiftEnd,
+                    campusVal,
+                    courseTopics,
+                    courseTasks,
+                  ],
+                );
               }
             }
           }
-        } catch (bridgeErr) {
-          console.warn('[ProfessorSubmissionsService] Bridge to reports warning:', bridgeErr);
         }
       }
 
-      await this.client.query(
-        `
-        INSERT INTO submissions (
-          report_id, user_id, professor_id, user_email, role, reference, record_type,
-          period, units, status, event, payload, topics, notes, submitted_at, current_stage, current_since
-        ) VALUES (
-          $1, $2, $2, $3, 'professor', $4, $5,
-          $6, $7, $8, $9, $10, $11, $12, NOW(), 'Checker', NOW()
-        )
-        ON CONFLICT (reference) DO UPDATE SET
-          status = EXCLUDED.status,
-          payload = EXCLUDED.payload,
-          event = EXCLUDED.event,
-          report_id = COALESCE(EXCLUDED.report_id, submissions.report_id),
-          updated_at = NOW()
-        RETURNING *;
-        `,
-        [
-          reportId,
-          profId,
-          userEmail,
-          reference,
-          type,
-          period,
-          units,
-          dbStatus,
-          event,
-          JSON.stringify(recordPayload),
-          topics,
-          notes,
-        ],
-      );
+      // 2. Synchronize legacy submissions table
+      try {
+        await this.client.query(
+          `
+          INSERT INTO submissions (
+            report_id, user_id, professor_id, user_email, role, reference, record_type,
+            period, units, status, event, payload, topics, notes, submitted_at, current_stage, current_since
+          ) VALUES (
+            $1, $2, $2, $3, 'professor', $4, $5,
+            $6, $7, $8, $9, $10, $11, $12, NOW(), 'Checker', NOW()
+          )
+          ON CONFLICT (reference) DO UPDATE SET
+            status = EXCLUDED.status,
+            payload = EXCLUDED.payload,
+            event = EXCLUDED.event,
+            report_id = COALESCE(EXCLUDED.report_id, submissions.report_id),
+            updated_at = NOW()
+          RETURNING *;
+          `,
+          [
+            reportId,
+            profId,
+            userEmail,
+            reference,
+            type,
+            period,
+            units,
+            dbStatus,
+            event,
+            JSON.stringify(recordPayload),
+            topics,
+            notes,
+          ],
+        );
+      } catch (subErr) {
+        console.warn('[ProfessorSubmissionsService] Submissions sync warning:', subErr);
+      }
 
-      return SuccessHandler('Submission recorded successfully', 201, {
-        id: reference,
+      return SuccessHandler('Accomplishment report submitted successfully', 201, {
+        id: reportId || reference,
+        reference,
         type,
         period,
         units,
-        status: titleStatus,
+        status: 'Pending',
+        stage: 'Checker',
+        stage_role: 'Checker',
+        stage_key: 'AR-AP-STG-1',
+        approval_stage: 'AR-AP-STG-1',
+        stage_order: 1,
+        currentStage: 'Checker',
+        submitted: formatDisplayDate(new Date()),
         event,
         record: recordPayload,
       });
     } catch (error) {
-      console.error('[ProfessorSubmissionsService] Error recording submission:', error);
+      console.error('[ProfessorSubmissionsService] Error recording accomplishment report:', error);
       return ErrorHandler(
-        error instanceof Error ? error.message : 'Failed to record submission',
+        error instanceof Error ? error.message : 'Failed to record accomplishment report',
         500,
       );
     }
   }
 
+  async createSubmission(user: UserSession | undefined, data: any) {
+    return this.createAccomplishmentReport(user, data);
+  }
+
   async getSubmissions(user?: UserSession, emailQuery?: string): Promise<HistoryRecord[]> {
     try {
       const prof = await this.resolveProfessor(user, emailQuery);
-      const records: HistoryRecord[] = [];
 
-      // 1. Fetch from submissions table for this professor
-      if (prof?.id || prof?.email) {
-        const subRes = await this.client.query(
-          `
-          SELECT * FROM submissions
-           WHERE professor_id = $1 OR user_id = $1 OR LOWER(user_email) = LOWER($2)
-           ORDER BY submitted_at DESC, created_at DESC
-           LIMIT 100
-          `,
-          [prof.id, prof.email],
-        );
+      // Fetch audit logs directly using AuditService (same source as aris-web audit logs)
+      const auditResult = await this.auditService.list({
+        type: 'All',
+      });
+      const allAuditLogs = (auditResult as any)?.data?.logs || (auditResult as any)?.logs || [];
 
-        for (const row of subRes.rows) {
-          let payload = row.payload;
-          if (typeof payload === 'string') {
-            try {
-              payload = JSON.parse(payload);
-            } catch {}
-          }
+      // Map audit logs to HistoryRecord shape
+      const mappedAuditRecords: HistoryRecord[] = allAuditLogs.map((log: any) => {
+        const stage = log.stage || 'Checker';
+        let status: 'Pending' | 'Approved' | 'Rejected' | 'Disapproved' = 'Pending';
+        if (log.result === 'Approved') status = 'Approved';
+        else if (log.result === 'Rejected') status = 'Rejected';
+        else if (log.result === 'Disapproved') status = 'Disapproved';
 
-          const titleStatus = toTitleCaseStatus(row.status);
-          const currentStage = row.current_stage || 'Checker';
+        const units = log.target?.includes('·')
+          ? log.target.split('·')[1].trim()
+          : log.record?.tables?.length
+            ? `${log.record.tables.length} courses`
+            : log.type === 'DTR'
+              ? '22 days'
+              : '3 courses';
+        const period = log.record?.period || (log.target?.includes('·') ? log.target.split('·')[0].trim() : 'Current Cycle');
+        const submitted = log.record?.reviewedAt || log.time || formatDisplayDate(new Date());
 
-          records.push({
-            id: row.reference || row.id,
-            type: (row.record_type === 'DTR' ? 'DTR' : 'AR'),
-            period: row.period || 'Current Cycle',
-            units: row.units || (row.record_type === 'DTR' ? '22 days' : '3 courses'),
-            submitted: formatDisplayDate(row.submitted_at || row.created_at),
-            status: titleStatus,
-            stage: currentStage,
-            currentStage: currentStage,
-            event: row.event || `${row.record_type} submitted · ${row.period || ''}`,
-            record: payload || {
-              period: row.period,
-              reference: row.reference,
-              facultyName: `${prof.firstname} ${prof.lastname}`,
-              facultyNumber: prof.employee_id,
-              college: prof.department || 'College of Liberal Arts and Sciences',
-              tables: [],
-              topics: row.topics,
-              tasks: row.notes,
-              reviewer: currentStage,
-              reviewedAt: formatDisplayDate(row.submitted_at),
-              remark: row.remark || 'Received and queued for review.',
-            },
-          });
-        }
-      }
+        return {
+          id: log.id || log.record?.reference,
+          type: log.type,
+          period,
+          units,
+          submitted,
+          status,
+          stage,
+          currentStage: stage,
+          event: log.action ? `${log.action} · ${log.target}` : log.target || `${log.type} submitted`,
+          record: log.record,
+        };
+      });
 
-      // 2. Fetch from accomplishment_reports table for this professor
-      if (prof?.id) {
-        const arRes = await this.client.query(
-          `
-          SELECT ar.*, ast.label as stage_label, ast.stage_order,
-                 COALESCE(up.firstname || ' ' || up.lastname, 'Faculty') as faculty_name
-            FROM accomplishment_reports ar
-            LEFT JOIN approval_stages ast ON ast.stage_key = ar.approval_stage
-            LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
-           WHERE ar.user_id = $1 OR ar.employee_id = $2 OR LOWER(up.email) = LOWER($3)
-           ORDER BY ar.created_at DESC
-           LIMIT 20
-          `,
-          [prof.id, prof.employee_id, prof.email],
-        );
+      // Scope to this professor if user/email is provided
+      const profEmail = (prof?.email || emailQuery || user?.email || '').toLowerCase().trim();
+      const profName = prof ? `${prof.firstname} ${prof.lastname}`.toLowerCase().trim() : ((user as any)?.name || '').toLowerCase().trim();
+      const profEmpId = (prof?.employee_id || '').toLowerCase().trim();
 
-        for (const ar of arRes.rows) {
-          const ref = `AR-${new Date(ar.created_at).toISOString().slice(0, 10).replace(/-/g, '')}-${ar.faculty_no || prof.employee_id || '001'}`;
-          const isDup = records.some((r) => r.id === ref || r.record?.reference === ref);
-          if (!isDup) {
-            const startStr = formatMonthDay(ar.period_start);
-            const endStr = formatMonthDay(ar.period_end);
-            const periodStr = `${startStr} – ${endStr}`;
-            
-            // Determine accurate stage and status
-            const stageName = STAGE_KEY_MAP[ar.approval_stage] || ar.stage_label || 'Checker';
-            let statusStr: 'Pending' | 'Approved' | 'Rejected' = 'Pending';
-            if (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks)) {
-              statusStr = 'Rejected';
-            } else if (ar.payroll_received || ar.payroll_availability) {
-              statusStr = 'Approved';
-            } else if (ar.approval_stage === 'AR-AP-STG-4') {
-              // At stage 4, in accounting processing
-              statusStr = 'Pending';
-            }
+      const scoped = mappedAuditRecords.filter((r) => {
+        const rec = r.record;
+        if (!rec) return false;
+        const recEmail = ((rec as any).email || '').toLowerCase().trim();
+        const recEmpId = (rec.facultyNumber || '').toLowerCase().trim();
+        const recName = (rec.facultyName || '').toLowerCase().trim();
 
-            const entriesRes = await this.client.query(
-              `SELECT * FROM report_entries WHERE report_id = $1 ORDER BY class_date, shift_start`,
-              [ar.id],
-            );
-            const entryRows = (entriesRes.rows || []).map((e) => [
-              e.code || '',
-              `${e.program || ''} ${e.year || ''}${e.section || ''}`.trim(),
-              Number(e.units) || 3,
-              e.day || '',
-              `${e.shift_start ? String(e.shift_start).slice(0, 5) : '08:00'}–${e.shift_end ? String(e.shift_end).slice(0, 5) : '11:00'}`,
-              (e.campus || '').toUpperCase(),
-            ]);
-            const unitLabel = entryRows.length > 0 ? `${entryRows.length} classes` : '1 report';
+        if (profEmail && recEmail && recEmail === profEmail) return true;
+        if (profEmpId && recEmpId && recEmpId === profEmpId) return true;
+        if (profName && recName && (recName.includes(profName) || profName.includes(recName))) return true;
+        return false;
+      });
 
-            records.push({
-              id: ref,
-              type: 'AR',
-              period: periodStr,
-              units: unitLabel,
-              submitted: formatDisplayDate(ar.created_at),
-              status: statusStr,
-              stage: stageName,
-              currentStage: stageName,
-              event: `AR submitted · ${periodStr}`,
-              record: {
-                period: periodStr,
-                reference: ref,
-                facultyName: ar.faculty_name,
-                facultyNumber: ar.faculty_no || prof.employee_id || '',
-                college: prof.department || 'College of Computer Studies',
-                stage: stageName,
-                tables: entryRows.length > 0 ? [
-                  {
-                    title: `Report Entries — ${periodStr}`,
-                    meta: `${startStr} – ${endStr}`,
-                    columns: ['Code', 'Program, Year & Section', 'Units', 'Days', 'Time', 'Campus'],
-                    rows: entryRows,
-                  },
-                ] : [],
-                topics: ar.remarks || '',
-                tasks: '',
-                reviewer: stageName,
-                reviewedAt: formatDisplayDate(ar.updated_at || ar.created_at),
-                remark: ar.payroll_received
-                  ? 'All outputs verified. Approved for payroll processing.'
-                  : `Currently with the ${stageName} office for review.`,
-              },
-            });
-          }
-        }
-      }
-
-      return records;
+      // If matched submissions exist for this professor, return them; otherwise return all audit logs
+      return scoped.length > 0 ? scoped : mappedAuditRecords;
     } catch (error) {
       console.error('[ProfessorSubmissionsService] getSubmissions error:', error);
       return [];

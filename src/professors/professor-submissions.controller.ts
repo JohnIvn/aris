@@ -39,12 +39,20 @@ export class ProfessorSubmissionsController {
     return this.submissionsService.getProfessorCourses(user, email);
   }
 
+  @Post('accomplishment-reports')
+  createAccomplishmentReport(
+    @Body() data: any,
+    @CurrentUser() user?: UserSession,
+  ) {
+    return this.submissionsService.createAccomplishmentReport(user, data);
+  }
+
   @Post('submissions')
   createSubmission(
     @Body() data: any,
     @CurrentUser() user?: UserSession,
   ) {
-    return this.submissionsService.createSubmission(user, data);
+    return this.submissionsService.createAccomplishmentReport(user, data);
   }
 
   @Get('dashboard')
