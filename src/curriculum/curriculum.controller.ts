@@ -12,11 +12,15 @@ import {
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 import { CurriculumService } from './curriculum.service';
 import {
+  CreateCollegeDto,
   CreateCourseDto,
   CreateDepartmentDto,
+  CreateProgramDto,
   CreateRankDto,
+  UpdateCollegeDto,
   UpdateCourseDto,
   UpdateDepartmentDto,
+  UpdateProgramDto,
   UpdateRankDto,
 } from './dto/curriculum.dto';
 
@@ -30,10 +34,37 @@ export class CurriculumController {
     return this.curriculumService.getOverview();
   }
 
-  // Departments
+  // --- COLLEGES ---
+  @Get('colleges')
+  listColleges(@Query('active') active?: string) {
+    return this.curriculumService.listColleges(active === 'true');
+  }
+
+  @Post('colleges')
+  createCollege(@Body() dto: CreateCollegeDto) {
+    return this.curriculumService.createCollege(dto);
+  }
+
+  @Patch('colleges/:id')
+  updateCollege(
+    @Param('id') id: string,
+    @Body() dto: UpdateCollegeDto,
+  ) {
+    return this.curriculumService.updateCollege(id, dto);
+  }
+
+  @Delete('colleges/:id')
+  deleteCollege(@Param('id') id: string) {
+    return this.curriculumService.deleteCollege(id);
+  }
+
+  // --- DEPARTMENTS ---
   @Get('departments')
-  listDepartments(@Query('active') active?: string) {
-    return this.curriculumService.listDepartments(active === 'true');
+  listDepartments(
+    @Query('active') active?: string,
+    @Query('college') college?: string,
+  ) {
+    return this.curriculumService.listDepartments(active === 'true', college);
   }
 
   @Post('departments')
@@ -54,7 +85,35 @@ export class CurriculumController {
     return this.curriculumService.deleteDepartment(id);
   }
 
-  // Academic Ranks
+  // --- PROGRAMS ---
+  @Get('programs')
+  listPrograms(
+    @Query('active') active?: string,
+    @Query('department') department?: string,
+    @Query('college') college?: string,
+  ) {
+    return this.curriculumService.listPrograms(active === 'true', department, college);
+  }
+
+  @Post('programs')
+  createProgram(@Body() dto: CreateProgramDto) {
+    return this.curriculumService.createProgram(dto);
+  }
+
+  @Patch('programs/:id')
+  updateProgram(
+    @Param('id') id: string,
+    @Body() dto: UpdateProgramDto,
+  ) {
+    return this.curriculumService.updateProgram(id, dto);
+  }
+
+  @Delete('programs/:id')
+  deleteProgram(@Param('id') id: string) {
+    return this.curriculumService.deleteProgram(id);
+  }
+
+  // --- ACADEMIC RANKS ---
   @Get('ranks')
   listRanks(@Query('active') active?: string) {
     return this.curriculumService.listRanks(active === 'true');
@@ -78,7 +137,7 @@ export class CurriculumController {
     return this.curriculumService.deleteRank(id);
   }
 
-  // Courses
+  // --- COURSES ---
   @Get('courses')
   listCourses(@Query('department') department?: string) {
     return this.curriculumService.listCourses(department);
@@ -102,4 +161,3 @@ export class CurriculumController {
     return this.curriculumService.deleteCourse(id);
   }
 }
-

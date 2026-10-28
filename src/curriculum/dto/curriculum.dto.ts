@@ -1,5 +1,43 @@
 import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
+// --- COLLEGES ---
+export class CreateCollegeDto {
+  @IsString()
+  @IsNotEmpty()
+  code: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  is_active?: boolean;
+}
+
+export class UpdateCollegeDto {
+  @IsString()
+  @IsOptional()
+  code?: string;
+
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  is_active?: boolean;
+}
+
+// --- DEPARTMENTS ---
 export class CreateDepartmentDto {
   @IsString()
   @IsNotEmpty()
@@ -8,6 +46,14 @@ export class CreateDepartmentDto {
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @IsString()
+  @IsOptional()
+  college_id?: string;
+
+  @IsString()
+  @IsOptional()
+  college_name?: string;
 
   @IsString()
   @IsOptional()
@@ -29,6 +75,14 @@ export class UpdateDepartmentDto {
 
   @IsString()
   @IsOptional()
+  college_id?: string;
+
+  @IsString()
+  @IsOptional()
+  college_name?: string;
+
+  @IsString()
+  @IsOptional()
   description?: string;
 
   @IsBoolean()
@@ -36,6 +90,76 @@ export class UpdateDepartmentDto {
   is_active?: boolean;
 }
 
+// --- PROGRAMS ---
+export class CreateProgramDto {
+  @IsString()
+  @IsNotEmpty()
+  code: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  department_id?: string;
+
+  @IsString()
+  @IsOptional()
+  department_name?: string;
+
+  @IsString()
+  @IsOptional()
+  college_id?: string;
+
+  @IsString()
+  @IsOptional()
+  college_name?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  is_active?: boolean;
+}
+
+export class UpdateProgramDto {
+  @IsString()
+  @IsOptional()
+  code?: string;
+
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  department_id?: string;
+
+  @IsString()
+  @IsOptional()
+  department_name?: string;
+
+  @IsString()
+  @IsOptional()
+  college_id?: string;
+
+  @IsString()
+  @IsOptional()
+  college_name?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  is_active?: boolean;
+}
+
+// --- ACADEMIC RANKS ---
 export class CreateRankDto {
   @IsString()
   @IsNotEmpty()
@@ -80,6 +204,7 @@ export class UpdateRankDto {
   is_active?: boolean;
 }
 
+// --- COURSES ---
 export class CreateCourseDto {
   @IsString()
   @IsNotEmpty()
@@ -139,4 +264,3 @@ export class UpdateCourseDto {
   @IsOptional()
   is_active?: boolean;
 }
-
