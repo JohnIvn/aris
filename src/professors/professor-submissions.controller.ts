@@ -31,6 +31,14 @@ export class ProfessorSubmissionsController {
     return this.submissionsService.getLatestSubmission(user, email);
   }
 
+  @Get('courses')
+  getProfessorCourses(
+    @CurrentUser() user?: UserSession,
+    @Query('email') email?: string,
+  ) {
+    return this.submissionsService.getProfessorCourses(user, email);
+  }
+
   @Post('submissions')
   createSubmission(
     @Body() data: any,

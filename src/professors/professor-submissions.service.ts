@@ -181,6 +181,8 @@ export class ProfessorSubmissionsService {
           if (reportId && Array.isArray(recordPayload.tables)) {
             for (const tbl of recordPayload.tables) {
               const courseTitle = tbl.title || 'General Course';
+              const courseTopics = tbl.topics || recordPayload.topics || 'Course syllabus alignment';
+              const courseTasks = tbl.tasks || recordPayload.tasks || 'Lecture and Discussion, Activity';
               if (Array.isArray(tbl.rows)) {
                 for (const row of tbl.rows) {
                   const code = String(row[0] || 'CC 105');
@@ -221,8 +223,8 @@ export class ProfessorSubmissionsService {
                       shiftStart,
                       shiftEnd,
                       campusVal,
-                      topics || 'Course syllabus alignment',
-                      recordPayload.tasks || 'Lecture and laboratory exercises',
+                      courseTopics,
+                      courseTasks,
                     ],
                   );
                 }
@@ -473,5 +475,81 @@ export class ProfessorSubmissionsService {
       ],
       recent,
     };
+  }
+
+  async getProfessorCourses(user?: UserSession, emailQuery?: string) {
+    try {
+      const prof = await this.resolveProfessor(user, emailQuery);
+      if (!prof) {
+        const allRes = await this.client.query(
+          `SELECT DISTINCT c.id, c.code, c.title, c.units, c.department_name, c.description, c.is_active
+             FROM curriculum_courses c
+            WHERE c.is_active = true
+            ORDER BY c.code ASC`,
+        );
+        return SuccessHandler('Courses fetched', 200, allRes.rows);
+      }
+
+      const profDept = prof.department || '';
+      const profId = prof.id;
+      const profEmail = prof.email;
+      const employeeId = prof.employee_id || '';
+
+      const query = `
+        SELECT DISTINCT c.id, c.code, c.title, c.units, c.department_name, c.description, c.is_active
+          FROM curriculum_courses c
+         WHERE c.is_active = true
+           AND (
+             c.assigned_professor_id = $1
+             OR LOWER(COALESCE(c.assigned_professor_email, '')) = LOWER($2)
+             OR (
+               $3 <> '' AND (
+                 LOWER(c.department_name) = LOWER($3)
+                 OR c.department_name ILIKE '%' || $3 || '%'
+                 OR $3 ILIKE '%' || c.department_name || '%'
+                 OR (
+                   ($3 ILIKE '%CSD%' OR $3 ILIKE '%Computer%') AND (c.department_name ILIKE '%Computer%' OR c.department_name ILIKE '%CSD%')
+                 )
+                 OR (
+                   ($3 ILIKE '%Engineering%') AND (c.department_name ILIKE '%Engineering%')
+                 )
+                 OR (
+                   ($3 ILIKE '%Education%') AND (c.department_name ILIKE '%Education%')
+                 )
+                 OR (
+                   ($3 ILIKE '%Criminal%' OR $3 ILIKE '%Justice%') AND (c.department_name ILIKE '%Criminal%' OR c.department_name ILIKE '%Justice%')
+                 )
+               )
+             )
+             OR c.code IN (
+               SELECT re.code
+                 FROM report_entries re
+                 JOIN accomplishment_reports ar ON ar.id = re.report_id
+                WHERE ar.user_id = $1 OR ar.employee_id = $4
+             )
+           )
+         ORDER BY c.code ASC
+      `;
+
+      const result = await this.client.query(query, [profId, profEmail, profDept, employeeId]);
+      let rows = result.rows;
+
+      if (rows.length === 0) {
+        // If no department-specific course was found, return active courses
+        const fallbackRes = await this.client.query(
+          `SELECT DISTINCT c.id, c.code, c.title, c.units, c.department_name, c.description, c.is_active
+             FROM curriculum_courses c
+            WHERE c.is_active = true
+            ORDER BY c.code ASC
+            LIMIT 15`,
+        );
+        rows = fallbackRes.rows;
+      }
+
+      return SuccessHandler('Professor courses fetched successfully', 200, rows);
+    } catch (error) {
+      console.error('[ProfessorSubmissionsService] getProfessorCourses error:', error);
+      return ErrorHandler(error instanceof Error ? error.message : 'Failed to fetch courses', 500);
+    }
   }
 }
