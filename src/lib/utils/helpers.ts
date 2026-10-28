@@ -49,14 +49,17 @@ async function findUser(
       ? `SELECT *, '${role}'::text AS role FROM ${USER_ROLE_TABLES[role]}`
       : roleUnion();
 
+    const whereClause =
+      column === 'id' ? 'id = $1' : `LOWER(${column}) = LOWER($1)`;
+
     const user = await client.query(
       `
             SELECT * FROM (
             ${union}
             ) AS members
-            WHERE ${column} = $1
+            WHERE ${whereClause}
             LIMIT 1`,
-      [value ?? null],
+      [value ? value.trim() : null],
     );
 
     return user.rows[0] as UserData | undefined;
@@ -90,4 +93,56 @@ export function getUserByUsername(
   role?: UserRoles,
 ): Promise<UserData | undefined> {
   return findUser(client, 'username', username, role);
+}
+
+export interface DuplicateUserMatch {
+  id: string;
+  email: string;
+  username: string;
+  role: string;
+  tableName: string;
+}
+
+export async function findDuplicateEmailAcrossRoles(
+  client: Pool,
+  email: string,
+  excludeId?: string,
+): Promise<DuplicateUserMatch | null> {
+  const normalized = (email || '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  const queries = USER_ROLES.map((role) => {
+    const table = USER_ROLE_TABLES[role];
+    return excludeId
+      ? `SELECT id, email, username, '${role}'::text AS role, '${table}'::text AS "tableName" FROM ${table} WHERE LOWER(email) = $1 AND id <> $2`
+      : `SELECT id, email, username, '${role}'::text AS role, '${table}'::text AS "tableName" FROM ${table} WHERE LOWER(email) = $1`;
+  });
+
+  const sql = `${queries.join('\nUNION ALL\n')} LIMIT 1`;
+  const params = excludeId ? [normalized, excludeId] : [normalized];
+
+  const result = await client.query<DuplicateUserMatch>(sql, params);
+  return result.rows[0] ?? null;
+}
+
+export async function findDuplicateUsernameAcrossRoles(
+  client: Pool,
+  username: string,
+  excludeId?: string,
+): Promise<DuplicateUserMatch | null> {
+  const normalized = (username || '').trim();
+  if (!normalized) return null;
+
+  const queries = USER_ROLES.map((role) => {
+    const table = USER_ROLE_TABLES[role];
+    return excludeId
+      ? `SELECT id, email, username, '${role}'::text AS role, '${table}'::text AS "tableName" FROM ${table} WHERE LOWER(username) = LOWER($1) AND id <> $2`
+      : `SELECT id, email, username, '${role}'::text AS role, '${table}'::text AS "tableName" FROM ${table} WHERE LOWER(username) = LOWER($1)`;
+  });
+
+  const sql = `${queries.join('\nUNION ALL\n')} LIMIT 1`;
+  const params = excludeId ? [normalized, excludeId] : [normalized];
+
+  const result = await client.query<DuplicateUserMatch>(sql, params);
+  return result.rows[0] ?? null;
 }

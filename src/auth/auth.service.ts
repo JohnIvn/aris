@@ -11,7 +11,8 @@ import { UserSession } from '../lib/data/interfaces';
 import {
   getUserByEmail,
   getUserById,
-  getUserByUsername,
+  findDuplicateEmailAcrossRoles,
+  findDuplicateUsernameAcrossRoles,
 } from '../lib/utils/helpers';
 
 import {
@@ -268,8 +269,15 @@ export class AuthService {
 
       const errors = [] as string[];
 
-      const emailExists = await getUserByEmail(this.db, email);
-      const usernameExists = await getUserByUsername(this.db, username);
+      const normalizedEmail = email ? email.trim().toLowerCase() : '';
+      const normalizedUsername = username ? username.trim() : '';
+
+      const emailExists = normalizedEmail
+        ? await findDuplicateEmailAcrossRoles(this.db, normalizedEmail)
+        : null;
+      const usernameExists = normalizedUsername
+        ? await findDuplicateUsernameAcrossRoles(this.db, normalizedUsername)
+        : null;
 
       if (emailExists) {
         await this.loggerService.logAuthAction({
@@ -278,7 +286,7 @@ export class AuthService {
           role: undefined,
           user_id: undefined,
           metadata: {
-            email: email,
+            email: normalizedEmail,
             firstname: firstname,
             middlename: middlename,
             lastname: lastname,
@@ -296,7 +304,7 @@ export class AuthService {
           role: undefined,
           user_id: undefined,
           metadata: {
-            email: email,
+            email: normalizedEmail,
             firstname: firstname,
             middlename: middlename,
             lastname: lastname,
@@ -358,14 +366,14 @@ export class AuthService {
         RETURNING *;
       `,
         [
-          email,
+          normalizedEmail,
           employeeId,
           firstname,
           lastname,
           middlename,
           gender,
           password_hash,
-          username,
+          normalizedUsername,
           avatar_url,
           birthday ? this.getUserAge(birthday) : null,
           birthday,

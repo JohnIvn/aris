@@ -5,7 +5,10 @@ import { LoggerService } from '../logger/logger.service';
 import { DatabaseService } from '../database/database.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { UserData } from '../lib/data/auth.interface';
-import { getUserByEmail, getUserByUsername } from '../lib/utils/helpers';
+import {
+  findDuplicateEmailAcrossRoles,
+  findDuplicateUsernameAcrossRoles,
+} from '../lib/utils/helpers';
 import {
   USER_ROLE_TABLES,
   isUserRole,
@@ -239,8 +242,15 @@ export class OAuthService {
         age,
       };
 
-      const emailExists = await getUserByEmail(this.db, profile.email);
-      const usernameExists = await getUserByUsername(this.db, username);
+      const normalizedEmail = profile.email ? profile.email.trim().toLowerCase() : '';
+      const normalizedUsername = (username || '').trim();
+
+      const emailExists = normalizedEmail
+        ? await findDuplicateEmailAcrossRoles(this.db, normalizedEmail)
+        : null;
+      const usernameExists = normalizedUsername
+        ? await findDuplicateUsernameAcrossRoles(this.db, normalizedUsername)
+        : null;
 
       if (emailExists) {
         await this.loggerService.logAuthAction({
@@ -277,11 +287,11 @@ export class OAuthService {
         `,
         [
           dto.employee_id,
-          username,
+          normalizedUsername,
           profile.firstname,
           dto.middlename ?? null,
           profile.lastname,
-          profile.email,
+          normalizedEmail,
           profile.avatar_url,
           dto.birthday ?? null,
           age,

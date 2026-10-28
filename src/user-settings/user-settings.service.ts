@@ -11,6 +11,10 @@ import { LoggerService } from '../logger/logger.service';
 import type { UserSession } from '../lib/data/interfaces';
 import { USER_ROLE_TABLES } from '../lib/data/types';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
+import {
+  findDuplicateEmailAcrossRoles,
+  findDuplicateUsernameAcrossRoles,
+} from '../lib/utils/helpers';
 
 @Injectable()
 export class UserSettingsService {
@@ -76,7 +80,7 @@ export class UserSettingsService {
   async getProfile(user: UserSession) {
     try {
       const result = await this.db.query(
-        `SELECT id, employee_id, firstname, middlename, lastname, email, avatar_url, position, department,
+        `SELECT id, employee_id, username, firstname, middlename, lastname, email, avatar_url, position, department,
                 phone, address, provider, created_at
          FROM ${this.table(user)} WHERE id = $1`,
         [user.id],
@@ -94,6 +98,7 @@ export class UserSettingsService {
       const middlename = this.text(data.middlename ?? data.middleName) || null;
       const lastname = this.text(data.lastname ?? data.lastName);
       const email = this.text(data.email).toLowerCase();
+      const rawUsername = data.username !== undefined ? this.text(data.username) : undefined;
       const phone = this.text(data.phone) || null;
       const address = this.text(data.address) || null;
       const department = this.text(data.department) || null;
@@ -103,8 +108,27 @@ export class UserSettingsService {
         return this.invalid('First name, last name, and email are required');
       }
 
+      const existingEmail = await findDuplicateEmailAcrossRoles(this.db, email, user.id);
+      if (existingEmail) {
+        return ErrorHandler('Email already in use', 409);
+      }
+
+      if (rawUsername) {
+        const existingUsername = await findDuplicateUsernameAcrossRoles(this.db, rawUsername, user.id);
+        if (existingUsername) {
+          return ErrorHandler('Username already in use', 409);
+        }
+      }
+
+      let usernameClause = '';
       let passwordClause = '';
       const params: any[] = [firstname, middlename, lastname, email, phone, address, department];
+
+      if (rawUsername) {
+        params.push(rawUsername);
+        usernameClause = `, username = $${params.length}`;
+      }
+
       if (password && password.length >= 8) {
         const hash = await argon2.hash(password);
         params.push(hash);
@@ -121,10 +145,11 @@ export class UserSettingsService {
              phone = $5,
              address = $6,
              department = $7
+             ${usernameClause}
              ${passwordClause},
              updated_at = NOW()
          WHERE id = $${params.length}
-         RETURNING id, employee_id, firstname, middlename, lastname, email, avatar_url, position, department, phone, address, provider`,
+         RETURNING id, employee_id, username, firstname, middlename, lastname, email, avatar_url, position, department, phone, address, provider`,
         params,
       );
       if (!result.rows[0]) return this.invalid('User profile not found', 404);

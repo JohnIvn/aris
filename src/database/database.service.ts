@@ -140,6 +140,67 @@ export class DatabaseService implements OnModuleInit {
         ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS address TEXT;
         ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS address TEXT;
         ALTER TABLE user_staffs ADD COLUMN IF NOT EXISTS address TEXT;
+
+        CREATE OR REPLACE FUNCTION check_cross_role_unique_email_and_username()
+        RETURNS TRIGGER AS $$
+        DECLARE
+          v_conflict RECORD;
+          v_tbl TEXT;
+          v_tables TEXT[] := ARRAY['user_admins', 'user_professors', 'user_staffs'];
+        BEGIN
+          IF NEW.email IS NOT NULL THEN
+            NEW.email := LOWER(TRIM(NEW.email));
+          END IF;
+          IF NEW.username IS NOT NULL THEN
+            NEW.username := TRIM(NEW.username);
+          END IF;
+
+          FOREACH v_tbl IN ARRAY v_tables LOOP
+            IF NEW.email IS NOT NULL THEN
+              EXECUTE format('SELECT id FROM %I WHERE LOWER(email) = $1 AND id <> $2 LIMIT 1', v_tbl)
+              INTO v_conflict
+              USING NEW.email, COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
+              IF v_conflict IS NOT NULL THEN
+                RAISE EXCEPTION 'Email "%" is already in use by another user', NEW.email
+                  USING ERRCODE = 'unique_violation';
+              END IF;
+            END IF;
+
+            IF NEW.username IS NOT NULL THEN
+              EXECUTE format('SELECT id FROM %I WHERE LOWER(username) = LOWER($1) AND id <> $2 LIMIT 1', v_tbl)
+              INTO v_conflict
+              USING NEW.username, COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
+              IF v_conflict IS NOT NULL THEN
+                RAISE EXCEPTION 'Username "%" is already in use by another user', NEW.username
+                  USING ERRCODE = 'unique_violation';
+              END IF;
+            END IF;
+          END LOOP;
+
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_unique_user_admins') THEN
+            CREATE TRIGGER trg_unique_user_admins
+            BEFORE INSERT OR UPDATE OF email, username ON user_admins
+            FOR EACH ROW EXECUTE FUNCTION check_cross_role_unique_email_and_username();
+          END IF;
+
+          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_unique_user_professors') THEN
+            CREATE TRIGGER trg_unique_user_professors
+            BEFORE INSERT OR UPDATE OF email, username ON user_professors
+            FOR EACH ROW EXECUTE FUNCTION check_cross_role_unique_email_and_username();
+          END IF;
+
+          IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_unique_user_staffs') THEN
+            CREATE TRIGGER trg_unique_user_staffs
+            BEFORE INSERT OR UPDATE OF email, username ON user_staffs
+            FOR EACH ROW EXECUTE FUNCTION check_cross_role_unique_email_and_username();
+          END IF;
+        END $$;
       `);
       console.log(chalk.bgGreen.black('[SUPABASE] All tables are ready!'));
     } catch (error) {

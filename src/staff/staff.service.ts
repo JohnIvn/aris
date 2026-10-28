@@ -5,6 +5,10 @@ import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { CreateStaffDto, UpdateStaffDto } from './staff.dto';
 import { OAuthService } from '../auth/oauth.service';
 import { LoggerService } from '../logger/logger.service';
+import {
+  findDuplicateEmailAcrossRoles,
+  findDuplicateUsernameAcrossRoles,
+} from '../lib/utils/helpers';
 
 @Injectable()
 export class StaffService {
@@ -58,7 +62,7 @@ export class StaffService {
         if (!data.oauth_id_token) throw new Error('A verified Google account is required.');
         const profile = await this.oauthService.verifyGoogleToken(data.oauth_id_token);
         if (!profile) throw new Error('The Google account could not be verified.');
-        email = profile.email;
+        email = profile.email.trim().toLowerCase();
         firstname = profile.firstname;
         lastname = profile.lastname;
         avatarUrl = profile.avatar_url;
@@ -66,6 +70,25 @@ export class StaffService {
         if (!data.password) throw new Error('Password is required for a local account.');
         passwordHash = await argon2.hash(data.password);
       }
+
+      const username = data.username.trim();
+
+      const existingEmail = await findDuplicateEmailAcrossRoles(
+        this.databaseService.getClient(),
+        email,
+      );
+      if (existingEmail) {
+        return ErrorHandler('Email already in use', 409);
+      }
+
+      const existingUsername = await findDuplicateUsernameAcrossRoles(
+        this.databaseService.getClient(),
+        username,
+      );
+      if (existingUsername) {
+        return ErrorHandler('Username already in use', 409);
+      }
+
       const result = await this.databaseService.getClient().query(
         `INSERT INTO user_staffs
           (employee_id, username, firstname, middlename, lastname, email, password_hash,
@@ -76,7 +99,7 @@ export class StaffService {
                    is_banned, created_at, updated_at`,
         [
           data.employee_id.trim(),
-          data.username.trim(),
+          username,
           firstname,
           data.middlename?.trim() || null,
           lastname,
@@ -116,11 +139,34 @@ export class StaffService {
       const middlename = data.middlename !== undefined ? (data.middlename?.trim() || null) : current.middlename;
       const lastname = data.lastname !== undefined ? data.lastname.trim() : current.lastname;
       const email = data.email !== undefined ? data.email.trim().toLowerCase() : current.email;
+      const username = data.username !== undefined ? data.username.trim() : current.username;
       const position = data.position !== undefined ? (data.position?.trim() || null) : current.position;
       const department = data.department !== undefined ? (data.department?.trim() || null) : current.department;
       const isBanned = data.active !== undefined ? !data.active : current.is_banned;
       const phone = data.phone !== undefined ? (data.phone?.trim() || null) : (current.phone || null);
       const address = data.address !== undefined ? (data.address?.trim() || null) : (current.address || null);
+
+      if (data.email !== undefined) {
+        const existingEmail = await findDuplicateEmailAcrossRoles(
+          this.databaseService.getClient(),
+          email,
+          id,
+        );
+        if (existingEmail) {
+          return ErrorHandler('Email already in use', 409);
+        }
+      }
+
+      if (data.username !== undefined) {
+        const existingUsername = await findDuplicateUsernameAcrossRoles(
+          this.databaseService.getClient(),
+          username,
+          id,
+        );
+        if (existingUsername) {
+          return ErrorHandler('Username already in use', 409);
+        }
+      }
 
       let passwordHash = current.password_hash;
       if (data.password && data.password.trim()) {
@@ -140,8 +186,9 @@ export class StaffService {
                 phone = $9,
                 address = $10,
                 password_hash = $11,
+                username = $12,
                 updated_at = NOW()
-          WHERE id = $12
+          WHERE id = $13
           RETURNING id, employee_id, username, firstname, middlename, lastname, email,
                     avatar_url, birthday, age, gender, position, department, provider,
                     is_banned, phone, address, created_at, updated_at`,
@@ -157,6 +204,7 @@ export class StaffService {
           phone,
           address,
           passwordHash,
+          username,
           id,
         ],
       );
