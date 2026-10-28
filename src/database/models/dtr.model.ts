@@ -12,7 +12,7 @@ export default async function createDtrModel(client: Pool) {
         time_out TIME DEFAULT null,
         total_hours NUMERIC(10, 2) DEFAULT 0,
         shift_date DATE NOT NULL,
-        on_site BOOLEAN DEFAULT FALSE
+        on_site BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
         )
