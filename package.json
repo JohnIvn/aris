@@ -34,7 +34,8 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-fastify": "^11.1.28",
-    "@nestjs/websockets": "^11.1.28",
+    "@nestjs/platform-ws": "^11.2.8",
+    "@nestjs/websockets": "^11.2.8",
     "@supabase/supabase-js": "^2.112.2",
     "argon2": "^0.45.1",
     "chalk": "^4.1.2",
@@ -51,7 +52,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "supabase": "^2.112.0",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -68,6 +69,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.4",
     "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.2",
     "class-validator": "^0.15.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

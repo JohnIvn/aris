@@ -456,7 +456,6 @@ export class ReportsService {
       return ErrorHandler('Server Error', 500, 'Unknown Error');
     }
   }
-
   async fetchReportsForMobile(
     user: UserSession,
     offset: number,
@@ -526,18 +525,21 @@ export class ReportsService {
             entriesByReport.get(report.id) ?? [],
           );
 
-          const [dtrTally, dtrEntries] = await Promise.all([
-            this.calculateDTRTally(
-              user.id,
-              report.period_start,
-              report.period_end,
-            ),
-            this.fetchDTREntries(
-              user.id,
-              report.period_start,
-              report.period_end,
-            ),
-          ]);
+          const dtrEntries = await this.fetchDTREntries(
+            user.id,
+            report.period_start,
+            report.period_end,
+          );
+
+          // Tally derived from the same rows the app displays, so they can't disagree.
+          const dtrTally =
+            Math.round(
+              dtrEntries.reduce(
+                (sum, e) => sum + Number(e.total_hours ?? 0),
+                0,
+              ) * 100,
+            ) / 100;
+
           return {
             id: report.id,
             periodLabel,
@@ -636,6 +638,8 @@ export class ReportsService {
       if (!dtrs) {
         return ErrorHandler('No DTR Found in that date period', 404);
       }
+
+      console.log('DTR Calculation: ', dtrs);
 
       const totalHrs = this.calculateDtrHrTally(dtrs);
 

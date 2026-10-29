@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Injectable,
   CanActivate,
@@ -16,10 +17,9 @@ export class JwtCookieGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<FastifyRequest>();
 
     const authorization = req.headers.authorization;
-    const bearerToken =
-      authorization?.startsWith('Bearer ')
-        ? authorization.slice('Bearer '.length).trim()
-        : undefined;
+    const bearerToken = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length).trim()
+      : undefined;
     const token = req.cookies?.token ?? bearerToken;
     if (!token) throw new UnauthorizedException('No token');
 

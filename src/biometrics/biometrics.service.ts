@@ -7,6 +7,7 @@ import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { EnrollBiometricDto } from './dto/enroll-biometric.dto';
+
 export interface EnrolledBiometricRecord {
   id: string;
   biometrics_id: string | null;
@@ -42,9 +43,11 @@ export class BiometricsError extends Error {
 }
 
 export interface Owner {
-  biometricsRowId: string; // dtr_biometrics.id
+  biometricsRowId: string; // dtr_biometrics.id (UUID)
+  slot: string | null; // dtr_biometrics.biometrics_id (fingerprint slot as text); this is what dtr.biometrics_id references
   professorId: string | null;
   staffId: string | null;
+  viaAuthenticator: boolean;
 }
 
 export interface PunchResult {
@@ -55,6 +58,7 @@ export interface PunchResult {
   timeOut: string | null;
   totalHours: string;
   onSite: boolean;
+  session: number; // 1 = first time in of the day, 2 = second, ...
   professorId: string | null;
   staffId: string | null;
 }
@@ -72,6 +76,11 @@ const TODAY = `(NOW() AT TIME ZONE '${TZ}')::date`;
 const NOW_TIME = `(NOW() AT TIME ZONE '${TZ}')::time(0)`;
 const DEBOUNCE_SECONDS = 60; // ignore a second scan right after a punch
 const MAX_SLOT = Number(process.env.BIOMETRIC_MAX_SLOT ?? 49); // highest template slot to hand out
+// time in/out pairs allowed per day (2 = AM + PM). 1 = a single time in/out per day.
+// const MAX_SESSIONS = Math.max(
+//   1,
+//   Number(process.env.BIOMETRIC_MAX_SESSIONS ?? 2),
+// );
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -165,10 +174,17 @@ export class BiometricsService {
     }
   }
 
-  /** Admin reset: every biometrics_id becomes NULL (registration reopens). Returns rows cleared. */
+  /**
+   * Admin reset: every biometrics_id becomes NULL (registration reopens). Returns rows cleared.
+   * dtr.biometrics_id references dtr_biometrics.biometrics_id, so the references are nulled in the
+   * same statement (a plain UPDATE would hit the foreign key once any dtr row exists).
+   */
   async resetRegistrations(): Promise<number> {
     const res = await this.db.query(
-      `UPDATE dtr_biometrics SET biometrics_id = NULL, updated_at = NOW()
+      `WITH unlink AS (
+         UPDATE dtr SET biometrics_id = NULL WHERE biometrics_id IS NOT NULL
+       )
+       UPDATE dtr_biometrics SET biometrics_id = NULL, updated_at = NOW()
        WHERE biometrics_id IS NOT NULL`,
     );
     return res.rowCount ?? 0;
@@ -202,15 +218,30 @@ export class BiometricsService {
     if (typeof value !== 'string' || !value) {
       throw new BiometricsError('invalid_request', "'value' is required");
     }
-    const { rows } = await this.db.query<BiometricsRow>(
-      `SELECT id, professor_id, staff_id FROM dtr_biometrics WHERE ${col} = $1 LIMIT 1`,
+
+    const where =
+      kind === 'biometric'
+        ? `(biometrics_id = $1 OR authenticator_fingerprint = $1)`
+        : `${col} = $1`;
+
+    const { rows } = await this.db.query<
+      BiometricsRow & { via_authenticator: boolean }
+    >(
+      `SELECT id, biometrics_id, professor_id, staff_id,
+            COALESCE(authenticator_fingerprint = $1 AND biometrics_id IS DISTINCT FROM $1, false) AS via_authenticator
+     FROM dtr_biometrics
+     WHERE ${where}
+     ORDER BY (biometrics_id = $1) DESC NULLS LAST
+     LIMIT 1`,
       [value],
     );
     if (!rows[0]) return null;
     return {
       biometricsRowId: rows[0].id,
+      slot: rows[0].biometrics_id ?? null,
       professorId: rows[0].professor_id,
       staffId: rows[0].staff_id,
+      viaAuthenticator: rows[0].via_authenticator,
     };
   }
 
@@ -230,66 +261,71 @@ export class BiometricsService {
         'unknown_credential',
         'No user is registered for this credential',
       );
-    return this.punch(owner, kind !== 'authenticator');
+    return this.punch(owner, !owner.viaAuthenticator);
   }
 
   /**
-   * First punch of the day = time in. Second = time out (+ total_hours).
-   * Anything after that is ignored. Only TODAY's row is ever touched, so a missed
-   * time-out from a previous day stays time_out NULL / total_hours 0 (absent) and
-   * never blocks today's time in.
+   * A day holds up to MAX_SESSIONS sessions, one dtr row each:
+   *   no open row  -> new row with time_in (until MAX_SESSIONS rows exist for today)
+   *   open row     -> time_out + total_hours for that session
+   * Set BIOMETRIC_MAX_SESSIONS=1 for a single time in/out per day.
+   * Only TODAY's rows are touched, so a missed time-out from a previous day stays
+   * time_out NULL / total_hours 0 (absent) and never blocks today's time in.
    * on_site is set on time in and kept on time out.
+   * A scan within DEBOUNCE_SECONDS of the last punch is ignored ('duplicate').
    */
   async punch(owner: Owner, onSite: boolean): Promise<PunchResult> {
-    const { rows } = await this.db.query<DtrRow>(
+    const { rows } = await this.db.query<
+      DtrRow & { too_soon: boolean; within_window: boolean }
+    >(
       `SELECT id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text,
-              (updated_at > NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds') AS too_soon
-       FROM dtr
-       WHERE shift_date = ${TODAY}
-         AND professor_id IS NOT DISTINCT FROM $1::uuid
-         AND staff_id IS NOT DISTINCT FROM $2::uuid
-       ORDER BY created_at DESC LIMIT 1`,
+            (updated_at > NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds') AS too_soon,
+            (created_at > NOW() - INTERVAL '24 hours') AS within_window
+     FROM dtr
+     WHERE professor_id IS NOT DISTINCT FROM $1::uuid
+       AND staff_id IS NOT DISTINCT FROM $2::uuid
+     ORDER BY created_at DESC LIMIT 1`,
       [owner.professorId, owner.staffId],
     );
     const row = rows[0];
-    const base = { professorId: owner.professorId, staffId: owner.staffId };
+    const who = { professorId: owner.professorId, staffId: owner.staffId };
 
-    if (!row) {
-      const ins = await this.db.query(
-        `INSERT INTO dtr (professor_id, staff_id, biometrics_id, time_in, shift_date, on_site)
-         VALUES ($1, $2, $3, ${NOW_TIME}, ${TODAY}, $4)
-         RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
-        [owner.professorId, owner.staffId, owner.biometricsRowId, onSite],
-      );
-      return this.toResult('time_in', ins.rows[0], base);
-    }
+    if (row?.too_soon) return this.toResult('duplicate', row, who, 1);
 
-    if (row.too_soon) return this.toResult('duplicate', row, base);
-    if (row.time_out) return this.toResult('already_completed', row, base);
-
-    if (!row.time_in) {
-      // row created elsewhere without a time in
-      const upd = await this.db.query(
-        `UPDATE dtr SET time_in = ${NOW_TIME}, on_site = $2, biometrics_id = $3, updated_at = NOW()
-         WHERE id = $1
-         RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
-        [row.id, onSite, owner.biometricsRowId],
-      );
-      return this.toResult('time_in', upd.rows[0], base);
-    }
-
-    const upd = await this.db.query(
-      `UPDATE dtr
+    // open row, started within 24h -> time out
+    if (row && row.time_in && !row.time_out && row.within_window) {
+      const upd = await this.db.query<DtrRow>(
+        `UPDATE dtr
        SET time_out = ${NOW_TIME},
-           total_hours = ROUND(GREATEST(EXTRACT(EPOCH FROM (${NOW_TIME} - time_in)), 0) / 3600.0, 2),
+           total_hours = ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600.0, 2),
            updated_at = NOW()
        WHERE id = $1
        RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
-      [row.id],
-    );
-    return this.toResult('time_out', upd.rows[0], base);
+        [row.id],
+      );
+      return this.toResult('time_out', upd.rows[0], who, 1);
+    }
+
+    // no row, last one closed, or open one older than 24h (stays absent) -> new time in
+    return this.insertSession(owner, onSite, 1, who);
   }
 
+  private async insertSession(
+    owner: Owner,
+    onSite: boolean,
+    session: number,
+    who: { professorId: string | null; staffId: string | null },
+  ): Promise<PunchResult> {
+    const ins = await this.db.query<DtrRow>(
+      `INSERT INTO dtr (professor_id, staff_id, biometrics_id, time_in, shift_date, on_site)
+       VALUES ($1, $2, $3, ${NOW_TIME}, ${TODAY}, $4)
+       RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
+      [owner.professorId, owner.staffId, owner.slot, onSite],
+    );
+    return this.toResult('time_in', ins.rows[0], who, session);
+  }
+
+  /** Latest dtr row for today (or null). */
   async getTodayRecord(userType: UserType, userId: string) {
     const col = this.checkUser(userType, userId);
     const { rows } = await this.db.query<DtrRow>(
@@ -301,10 +337,24 @@ export class BiometricsService {
     return rows[0] ?? null;
   }
 
+  /** Every session for today plus the day's total hours. */
+  async getTodayRecords(userType: UserType, userId: string) {
+    const col = this.checkUser(userType, userId);
+    const { rows } = await this.db.query<DtrRow>(
+      `SELECT id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text
+       FROM dtr WHERE ${col} = $1 AND shift_date = ${TODAY}
+       ORDER BY created_at ASC`,
+      [userId],
+    );
+    const total = rows.reduce((sum, r) => sum + Number(r.total_hours ?? 0), 0);
+    return { sessions: rows, totalHours: Math.round(total * 100) / 100 };
+  }
+
   private toResult(
     action: PunchAction,
     r: DtrRow,
     who: { professorId: string | null; staffId: string | null },
+    session: number,
   ): PunchResult {
     return {
       action,
@@ -314,6 +364,7 @@ export class BiometricsService {
       timeOut: r.time_out,
       totalHours: r.total_hours,
       onSite: r.on_site,
+      session,
       ...who,
     };
   }
