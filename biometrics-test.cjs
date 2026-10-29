@@ -21,7 +21,7 @@ const opt = (n) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
-const BASE = process.env.SERVER_URL || 'ws://localhost:3000/biometrics';
+const BASE = process.env.URL || 'ws://localhost:3000/biometrics';
 const DEVICE_ID = process.env.DEVICE_ID || 'aris-bio-test';
 const DEVICE_TOKEN = process.env.BIOMETRIC_DEVICE_TOKEN || '';
 const CLIENT_TOKEN = process.env.BIOMETRIC_CLIENT_TOKEN || '';
@@ -288,7 +288,7 @@ const show = (label, m) =>
   const userType = opt('user-type');
   const userId = opt('user-id');
   if (userId) {
-    const reg = await client.request('register', { userType, userId }, 90000);
+    const reg = await client.request('register', { userType, userId });
     show('register', reg);
 
     const slot = reg.success ? reg.data.slot : device?.lastSlot;
