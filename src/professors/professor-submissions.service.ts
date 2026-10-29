@@ -249,16 +249,24 @@ export class ProfessorSubmissionsService {
 
         let repRes;
         if (existingReportId) {
+          const resubmitRemark =
+            notes && !/disapprov|reject|return/i.test(notes)
+              ? notes
+              : 'Resubmitted with corrections. Pending review.';
+
           repRes = await this.client.query(
             `
             UPDATE accomplishment_reports
                SET approval_stage = 'AR-AP-STG-1',
                    remarks = $1,
+                   payroll_availability = FALSE,
+                   payroll_received = FALSE,
+                   payroll_received_date = NULL,
                    updated_at = NOW()
              WHERE id = $2
              RETURNING id;
             `,
-            [notes || 'Resubmitted with corrections from ARIS Desktop', existingReportId],
+            [resubmitRemark, existingReportId],
           );
           if (repRes.rows.length > 0) {
             reportId = repRes.rows[0].id;
@@ -341,14 +349,17 @@ export class ProfessorSubmissionsService {
         const updateSubRes = await this.client.query(
           `
           UPDATE submissions
-             SET status = $1,
-                 payload = $2,
-                 event = $3,
-                 topics = $4,
-                 notes = $5,
+             SET status = 'pending'::submission_status,
+                 payload = $1,
+                 event = $2,
+                 topics = $3,
+                 notes = $4,
                  current_stage = 'Checker',
                  current_since = NOW(),
                  stage = 'Checker',
+                 reviewed_by = NULL,
+                 reviewed_at = NULL,
+                 remark = $5,
                  report_id = COALESCE($6::uuid, submissions.report_id),
                  updated_at = NOW()
            WHERE reference = $7
@@ -356,11 +367,11 @@ export class ProfessorSubmissionsService {
            RETURNING *;
           `,
           [
-            dbStatus,
             JSON.stringify(recordPayload),
-            event,
+            event.includes('resubmit') ? event : `AR resubmitted with corrections · ${period}`,
             topics,
             notes,
+            'Resubmitted with corrections. Queued for Faculty Checker review.',
             reportId,
             reference,
           ],
