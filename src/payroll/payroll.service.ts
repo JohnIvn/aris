@@ -11,6 +11,12 @@ import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { PayrollData } from '../lib/data/payroll.interface';
 import { UserSession } from '../lib/data/interfaces';
 import { LoggerService } from '../logger/logger.service';
+import {
+  PayrollConfig,
+  DEFAULT_PAYROLL_CONFIG,
+  resolveFacultyRate,
+  computePayrollAmount,
+} from './payroll-config.interface';
 
 @Injectable()
 export class PayrollService {
@@ -23,8 +29,64 @@ export class PayrollService {
     return this.databaseService.getClient();
   }
 
+  async getPayrollConfig(): Promise<PayrollConfig> {
+    try {
+      const res = await this.db.query<{ setting_value: string }>(
+        `SELECT setting_value FROM system_settings WHERE setting_key = 'payroll_computation_config' LIMIT 1`,
+      );
+      if (res.rows.length > 0 && res.rows[0].setting_value) {
+        const parsed = JSON.parse(res.rows[0].setting_value);
+        return { ...DEFAULT_PAYROLL_CONFIG, ...parsed };
+      }
+    } catch (err) {
+      // Fall back to default config if not initialized or on query error
+    }
+    return { ...DEFAULT_PAYROLL_CONFIG };
+  }
+
+  async updatePayrollConfig(
+    user: UserSession,
+    updates: Partial<PayrollConfig>,
+  ): Promise<PayrollConfig> {
+    const current = await this.getPayrollConfig();
+    const merged: PayrollConfig = {
+      ...current,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user.id,
+    };
+
+    await this.db.query(
+      `INSERT INTO system_settings (
+         id, setting_key, setting_value, data_type, category, description, updated_by, updated_at
+       ) VALUES (
+         gen_random_uuid(), 'payroll_computation_config', $1, 'json', 'payroll',
+         'Dynamic calculation rates and configuration for faculty payroll computation',
+         $2, NOW()
+       )
+       ON CONFLICT (setting_key)
+       DO UPDATE SET
+         setting_value = EXCLUDED.setting_value,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = NOW()`,
+      [JSON.stringify(merged), user.id],
+    );
+
+    await this.loggerService.logUserAction({
+      action_status: 'success',
+      action_type: 'update_payroll_config',
+      user_id: user.id,
+      role: user.role,
+      metadata: merged as unknown as Record<string, unknown>,
+    });
+
+    return merged;
+  }
+
   async fetchPayrolls(offset: number, limit: number) {
     try {
+      const config = await this.getPayrollConfig();
+
       // 1. Fetch official recorded payroll from `payroll` table
       const payrollRes = await this.db.query<{
         id: string;
@@ -86,7 +148,7 @@ export class PayrollService {
             : row.status === 'Rejected' || row.status === 'rejected' || row.status === 'disapproved'
               ? 'Rejected'
               : 'Pending';
-        const numRate = Number(row.rate) || 500;
+        const numRate = Number(row.rate) || config.baseHourlyRate;
         const numAmount = Number(row.amount || row.salary) || (Number(row.hours) * numRate) || 0;
         allRecords.push({
           id: row.id,
@@ -106,6 +168,7 @@ export class PayrollService {
         id: string;
         name: string;
         employee_id: string;
+        faculty_position: string | null;
         period_start: Date | null;
         period_end: Date | null;
         entry_count: number;
@@ -119,6 +182,7 @@ export class PayrollService {
            ar.id,
            COALESCE(up.firstname || ' ' || up.lastname, us.firstname || ' ' || us.lastname, 'Faculty ' || COALESCE(ar.faculty_no, '')) AS name,
            COALESCE(ar.employee_id, up.employee_id, ar.faculty_no) AS employee_id,
+           up.position AS faculty_position,
            ar.period_start,
            ar.period_end,
            COALESCE((SELECT COUNT(*)::int FROM report_entries re WHERE re.report_id = ar.id), 0) AS entry_count,
@@ -152,9 +216,10 @@ export class PayrollService {
           status = 'Rejected';
         }
 
-        const hours = Number(ar.calculated_hours) || 30;
-        const rate = 500;
-        const amount = Math.round(hours * rate);
+        const hours = Number(ar.calculated_hours) || Number(config.defaultCycleHours) || 30;
+        const calc = computePayrollAmount('AR', hours, ar.faculty_position, config);
+        const rate = calc.rate;
+        const amount = calc.netAmount;
         const period =
           ar.period_start && ar.period_end
             ? `${new Date(ar.period_start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(ar.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
@@ -201,8 +266,9 @@ export class PayrollService {
 
         for (const dtr of dtrRes.rows) {
           const hours = Number(dtr.total_hours) || 80;
-          const rate = 250;
-          const amount = Math.round(hours * rate);
+          const calc = computePayrollAmount('DTR', hours, null, config);
+          const rate = calc.rate;
+          const amount = calc.netAmount;
           const status: 'Approved' | 'Pending' | 'Rejected' =
             dtr.days_logged >= 20 ? 'Approved' : 'Pending';
           const period =

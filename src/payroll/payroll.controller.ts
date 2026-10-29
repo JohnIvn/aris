@@ -4,6 +4,7 @@ import {
   DefaultValuePipe,
   Get,
   ParseIntPipe,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,10 +20,28 @@ import { CurrentUser } from '../lib/decorators/cookie-decorator';
 import { type UserSession } from '../lib/data/interfaces';
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 import { Roles } from '../lib/decorators/roles.decorator';
+import { PayrollConfig } from './payroll-config.interface';
 
 @Controller('payroll')
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
+
+  @Roles('admin')
+  @UseGuards(JwtCookieGuard)
+  @Get('config')
+  async getPayrollConfig() {
+    return this.payrollService.getPayrollConfig();
+  }
+
+  @Roles('admin')
+  @UseGuards(JwtCookieGuard)
+  @Put('config')
+  async updatePayrollConfig(
+    @CurrentUser() user: UserSession,
+    @Body() data: Partial<PayrollConfig>,
+  ) {
+    return this.payrollService.updatePayrollConfig(user, data);
+  }
 
   @Roles('admin', 'staff')
   @UseGuards(JwtCookieGuard)

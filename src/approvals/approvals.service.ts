@@ -4,6 +4,11 @@ import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { UserSession } from '../lib/data/interfaces';
 import { UpdateApprovalDto } from './dto/approvals.dto';
+import {
+  PayrollConfig,
+  DEFAULT_PAYROLL_CONFIG,
+  computePayrollAmount,
+} from '../payroll/payroll-config.interface';
 
 export type StageRole = 'Checker' | 'Secretary' | 'HR' | 'Accounting';
 export type StatusKind = 'Pending' | 'Approved' | 'Disapproved' | 'Flagged';
@@ -108,6 +113,18 @@ export class ApprovalsService {
 
   private get client() {
     return this.databaseService.getClient();
+  }
+
+  private async getPayrollConfig(): Promise<PayrollConfig> {
+    try {
+      const res = await this.client.query<{ setting_value: string }>(
+        `SELECT setting_value FROM system_settings WHERE setting_key = 'payroll_computation_config' LIMIT 1`,
+      );
+      if (res.rows.length > 0 && res.rows[0].setting_value) {
+        return { ...DEFAULT_PAYROLL_CONFIG, ...JSON.parse(res.rows[0].setting_value) };
+      }
+    } catch {}
+    return { ...DEFAULT_PAYROLL_CONFIG };
   }
 
   async listApprovals(user?: UserSession) {
@@ -546,7 +563,9 @@ export class ApprovalsService {
           const subId = subRes.rows[0]?.id || null;
 
           if (isAccountingApproval) {
-            // Automatically calculate payroll based on time (assumed for now)
+            // Automatically calculate payroll based on dynamic rates configuration
+            const payrollConfig = await this.getPayrollConfig();
+
             const entriesRes = await this.client.query(
               `SELECT id, units, shift_hours, shift_start, shift_end, class_date
                  FROM report_entries
@@ -564,7 +583,8 @@ export class ApprovalsService {
                  ar.period_end,
                  COALESCE(up.firstname || ' ' || up.lastname, us.firstname || ' ' || us.lastname, 'Faculty') AS faculty_name,
                  COALESCE(up.id, ar.user_id) AS prof_id,
-                 COALESCE(up.employee_id, ar.employee_id, ar.faculty_no) AS emp_id
+                 COALESCE(up.employee_id, ar.employee_id, ar.faculty_no) AS emp_id,
+                 up.position AS faculty_position
                FROM accomplishment_reports ar
                LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
                LEFT JOIN user_staffs us ON us.id = ar.user_id OR us.employee_id = ar.employee_id
@@ -592,12 +612,13 @@ export class ApprovalsService {
             }
 
             if (totalHours <= 0) {
-              totalHours = 30; // standard default period duty hours
+              totalHours = Number(payrollConfig.defaultCycleHours) || 30; // standard default period duty hours
             }
 
-            // Assumed hourly teaching rate: ₱500/hr
-            const ASSUMED_HOURLY_RATE = 500;
-            const calculatedSalary = Math.round(totalHours * ASSUMED_HOURLY_RATE);
+            // Dynamic calculation using configured rates and faculty rank
+            const calc = computePayrollAmount('AR', totalHours, arInfo.faculty_position, payrollConfig);
+            const hourlyRate = calc.rate;
+            const calculatedSalary = calc.netAmount;
 
             const periodStr =
               arInfo.period_start && arInfo.period_end
@@ -616,9 +637,14 @@ export class ApprovalsService {
               report_id: id,
               approved_by: user.id,
               approver_role: role || currentStageRole,
-              hourly_rate: ASSUMED_HOURLY_RATE,
+              faculty_rank: arInfo.faculty_position || 'Faculty',
+              hourly_rate: hourlyRate,
               total_hours: totalHours,
-              formula: `${totalHours} hrs × ₱${ASSUMED_HOURLY_RATE}/hr = ₱${calculatedSalary}`,
+              regular_pay: calc.regularPay,
+              overload_pay: calc.overloadPay,
+              allowance: calc.allowance,
+              tax_amount: calc.taxAmount,
+              formula: calc.formula,
             });
 
             if (existingPayroll.rows.length > 0) {
@@ -647,7 +673,7 @@ export class ApprovalsService {
                   periodStr,
                   unitsStr,
                   totalHours,
-                  ASSUMED_HOURLY_RATE,
+                  hourlyRate,
                   calculatedSalary,
                   meta,
                   payrollId,
@@ -670,7 +696,7 @@ export class ApprovalsService {
                   periodStr,
                   unitsStr,
                   totalHours,
-                  ASSUMED_HOURLY_RATE,
+                  hourlyRate,
                   calculatedSalary,
                   meta,
                 ],
@@ -690,7 +716,7 @@ export class ApprovalsService {
               id: payrollId,
               amount: calculatedSalary,
               hours: totalHours,
-              rate: ASSUMED_HOURLY_RATE,
+              rate: hourlyRate,
               period: periodStr,
               units: unitsStr,
               status: 'Approved',
@@ -778,8 +804,10 @@ export class ApprovalsService {
           daysLogged = 10;
         }
 
-        const ASSUMED_DTR_RATE = 250; // ₱250/hr
-        const calculatedSalary = Math.round(totalHours * ASSUMED_DTR_RATE);
+        const payrollConfig = await this.getPayrollConfig();
+        const calc = computePayrollAmount('DTR', totalHours, null, payrollConfig);
+        const dtrRate = calc.rate;
+        const calculatedSalary = calc.netAmount;
 
         const profRes = await this.client.query(
           `SELECT id, firstname, lastname, employee_id FROM user_professors WHERE id = $1 LIMIT 1`,
@@ -801,9 +829,13 @@ export class ApprovalsService {
           professor_id: profId,
           total_hours: totalHours,
           days_logged: daysLogged,
-          rate: ASSUMED_DTR_RATE,
+          rate: dtrRate,
+          regular_pay: calc.regularPay,
+          overload_pay: calc.overloadPay,
+          allowance: calc.allowance,
+          tax_amount: calc.taxAmount,
           approved_by: user.id,
-          formula: `${totalHours} hrs × ₱${ASSUMED_DTR_RATE}/hr = ₱${calculatedSalary}`,
+          formula: calc.formula,
         });
 
         const existing = await this.client.query(
@@ -831,7 +863,7 @@ export class ApprovalsService {
               periodStr,
               unitsStr,
               totalHours,
-              ASSUMED_DTR_RATE,
+              dtrRate,
               calculatedSalary,
               meta,
               pId,
@@ -851,7 +883,7 @@ export class ApprovalsService {
               periodStr,
               unitsStr,
               totalHours,
-              ASSUMED_DTR_RATE,
+              dtrRate,
               calculatedSalary,
               meta,
             ],
@@ -870,7 +902,7 @@ export class ApprovalsService {
           id: pId,
           amount: calculatedSalary,
           hours: totalHours,
-          rate: ASSUMED_DTR_RATE,
+          rate: dtrRate,
           period: periodStr,
           units: unitsStr,
           status: 'Approved',
