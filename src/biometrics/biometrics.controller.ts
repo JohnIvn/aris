@@ -36,4 +36,3 @@ export class BiometricsController {
     return this.biometricsService.deleteBiometric(id);
   }
 }
-
