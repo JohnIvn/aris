@@ -162,12 +162,17 @@ export class ProfessorSubmissionsService {
   async createAccomplishmentReport(user: UserSession | undefined, data: any) {
     try {
       const type: 'AR' | 'DTR' = (data.type === 'DTR' || data.recordType?.includes('DTR')) ? 'DTR' : 'AR';
-      const reference: string = data.id || data.reference || `${type}-${Date.now()}`;
+      const recordPayload = data.record || data;
+      const rawReference: string =
+        data.reference ||
+        recordPayload.reference ||
+        (data.id && typeof data.id === 'string' && !data.id.includes('-') ? data.id : '') ||
+        '';
+      const reference: string = rawReference || `${type}-${Date.now()}`;
       const period: string = data.period || 'Current Cycle';
       const units: string = data.units || (type === 'AR' ? '3 courses' : '22 days');
       const dbStatus = toDbStatus(data.status);
       const event: string = data.event || `${type} submitted · ${period}`;
-      const recordPayload = data.record || data;
       const userEmail =
         user?.email ||
         data.email ||
@@ -197,21 +202,84 @@ export class ProfessorSubmissionsService {
 
       let reportId: string | null = null;
 
-      // 1. Primary insert directly into accomplishment_reports & report_entries
+      // 1. Primary insert or update directly into accomplishment_reports & report_entries
       if (type === 'AR') {
-        const repRes = await this.client.query(
-          `
-          INSERT INTO accomplishment_reports (
-            user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks, created_at, updated_at
-          ) VALUES (
-            $1, $2, $3, CURRENT_DATE - INTERVAL '14 days', CURRENT_DATE, 'AR-AP-STG-1', $4, NOW(), NOW()
-          )
-          RETURNING id;
-          `,
-          [profId, employeeId, facultyNo, notes || 'Submitted from ARIS Desktop'],
-        );
+        let existingReportId: string | null =
+          (data.report_id && typeof data.report_id === 'string' && data.report_id.includes('-') && data.report_id.length === 36 ? data.report_id : null) ||
+          (data.id && typeof data.id === 'string' && data.id.includes('-') && data.id.length === 36 ? data.id : null) ||
+          (recordPayload.id && typeof recordPayload.id === 'string' && recordPayload.id.includes('-') && recordPayload.id.length === 36 ? recordPayload.id : null) ||
+          (recordPayload.report_id && typeof recordPayload.report_id === 'string' && recordPayload.report_id.includes('-') && recordPayload.report_id.length === 36 ? recordPayload.report_id : null);
 
-        reportId = repRes.rows[0]?.id || null;
+        if (!existingReportId && reference) {
+          const subCheck = await this.client.query(
+            `SELECT report_id FROM submissions WHERE (reference = $1 OR payload->>'reference' = $1) AND report_id IS NOT NULL LIMIT 1`,
+            [reference],
+          );
+          if (subCheck.rows.length > 0 && subCheck.rows[0].report_id) {
+            existingReportId = subCheck.rows[0].report_id;
+          }
+        }
+
+        if (!existingReportId && reference && reference.startsWith('AR-')) {
+          const parts = reference.split('-');
+          const shortId = parts[parts.length - 1];
+          if (shortId && shortId.length >= 6) {
+            const arCheck = await this.client.query(
+              `SELECT id FROM accomplishment_reports WHERE id::text ILIKE $1 || '%' LIMIT 1`,
+              [shortId],
+            );
+            if (arCheck.rows.length > 0) {
+              existingReportId = arCheck.rows[0].id;
+            }
+          }
+        }
+
+        if (!existingReportId && (data.is_revision || data.isRevision || data.status === 'Pending')) {
+          const revCheck = await this.client.query(
+            `SELECT id FROM accomplishment_reports 
+              WHERE (user_id = $1 OR employee_id = $2 OR faculty_no = $3)
+                AND (remarks ILIKE '%disapprov%' OR remarks ILIKE '%reject%' OR remarks ILIKE '%correction%')
+              ORDER BY updated_at DESC LIMIT 1`,
+            [profId, employeeId, facultyNo],
+          );
+          if (revCheck.rows.length > 0) {
+            existingReportId = revCheck.rows[0].id;
+          }
+        }
+
+        let repRes;
+        if (existingReportId) {
+          repRes = await this.client.query(
+            `
+            UPDATE accomplishment_reports
+               SET approval_stage = 'AR-AP-STG-1',
+                   remarks = $1,
+                   updated_at = NOW()
+             WHERE id = $2
+             RETURNING id;
+            `,
+            [notes || 'Resubmitted with corrections from ARIS Desktop', existingReportId],
+          );
+          if (repRes.rows.length > 0) {
+            reportId = repRes.rows[0].id;
+            await this.client.query(`DELETE FROM report_entries WHERE report_id = $1`, [reportId]);
+          }
+        }
+
+        if (!reportId) {
+          repRes = await this.client.query(
+            `
+            INSERT INTO accomplishment_reports (
+              user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks, created_at, updated_at
+            ) VALUES (
+              $1, $2, $3, CURRENT_DATE - INTERVAL '14 days', CURRENT_DATE, 'AR-AP-STG-1', $4, NOW(), NOW()
+            )
+            RETURNING id;
+            `,
+            [profId, employeeId, facultyNo, notes || 'Submitted from ARIS Desktop'],
+          );
+          reportId = repRes.rows[0]?.id || null;
+        }
 
         if (reportId && Array.isArray(recordPayload.tables)) {
           for (const tbl of recordPayload.tables) {
@@ -268,40 +336,72 @@ export class ProfessorSubmissionsService {
         }
       }
 
-      // 2. Synchronize legacy submissions table
+      // 2. Synchronize legacy submissions table (Update if exists, insert otherwise)
       try {
-        await this.client.query(
+        const updateSubRes = await this.client.query(
           `
-          INSERT INTO submissions (
-            report_id, user_id, professor_id, user_email, role, reference, record_type,
-            period, units, status, event, payload, topics, notes, submitted_at, current_stage, current_since
-          ) VALUES (
-            $1, $2, $2, $3, 'professor', $4, $5,
-            $6, $7, $8, $9, $10, $11, $12, NOW(), 'Checker', NOW()
-          )
-          ON CONFLICT (reference) DO UPDATE SET
-            status = EXCLUDED.status,
-            payload = EXCLUDED.payload,
-            event = EXCLUDED.event,
-            report_id = COALESCE(EXCLUDED.report_id, submissions.report_id),
-            updated_at = NOW()
-          RETURNING *;
+          UPDATE submissions
+             SET status = $1,
+                 payload = $2,
+                 event = $3,
+                 topics = $4,
+                 notes = $5,
+                 current_stage = 'Checker',
+                 current_since = NOW(),
+                 stage = 'Checker',
+                 report_id = COALESCE($6::uuid, submissions.report_id),
+                 updated_at = NOW()
+           WHERE reference = $7
+              OR ($6::uuid IS NOT NULL AND report_id = $6::uuid)
+           RETURNING *;
           `,
           [
-            reportId,
-            profId,
-            userEmail,
-            reference,
-            type,
-            period,
-            units,
             dbStatus,
-            event,
             JSON.stringify(recordPayload),
+            event,
             topics,
             notes,
+            reportId,
+            reference,
           ],
         );
+
+        if (updateSubRes.rows.length === 0) {
+          await this.client.query(
+            `
+            INSERT INTO submissions (
+              report_id, user_id, professor_id, user_email, role, reference, record_type,
+              period, units, status, event, payload, topics, notes, submitted_at, current_stage, current_since
+            ) VALUES (
+              $1, $2, $2, $3, 'professor', $4, $5,
+              $6, $7, $8, $9, $10, $11, $12, NOW(), 'Checker', NOW()
+            )
+            ON CONFLICT (reference) DO UPDATE SET
+              status = EXCLUDED.status,
+              payload = EXCLUDED.payload,
+              event = EXCLUDED.event,
+              report_id = COALESCE(EXCLUDED.report_id, submissions.report_id),
+              current_stage = 'Checker',
+              current_since = NOW(),
+              updated_at = NOW()
+            RETURNING *;
+            `,
+            [
+              reportId,
+              profId,
+              userEmail,
+              reference,
+              type,
+              period,
+              units,
+              dbStatus,
+              event,
+              JSON.stringify(recordPayload),
+              topics,
+              notes,
+            ],
+          );
+        }
       } catch (subErr) {
         console.warn('[ProfessorSubmissionsService] Submissions sync warning:', subErr);
       }
