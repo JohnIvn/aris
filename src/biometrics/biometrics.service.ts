@@ -47,6 +47,7 @@ export interface Owner {
   slot: string | null; // dtr_biometrics.biometrics_id (fingerprint slot as text); this is what dtr.biometrics_id references
   professorId: string | null;
   staffId: string | null;
+  viaAuthenticator: boolean;
 }
 
 export interface PunchResult {
@@ -218,14 +219,16 @@ export class BiometricsService {
       throw new BiometricsError('invalid_request', "'value' is required");
     }
 
-    // a fingerprint slot may be stored in biometrics_id or authenticator_fingerprint
     const where =
       kind === 'biometric'
         ? `(biometrics_id = $1 OR authenticator_fingerprint = $1)`
         : `${col} = $1`;
 
-    const { rows } = await this.db.query<BiometricsRow>(
-      `SELECT id, biometrics_id, professor_id, staff_id
+    const { rows } = await this.db.query<
+      BiometricsRow & { via_authenticator: boolean }
+    >(
+      `SELECT id, biometrics_id, professor_id, staff_id,
+            COALESCE(authenticator_fingerprint = $1 AND biometrics_id IS DISTINCT FROM $1, false) AS via_authenticator
      FROM dtr_biometrics
      WHERE ${where}
      ORDER BY (biometrics_id = $1) DESC NULLS LAST
@@ -238,6 +241,7 @@ export class BiometricsService {
       slot: rows[0].biometrics_id ?? null,
       professorId: rows[0].professor_id,
       staffId: rows[0].staff_id,
+      viaAuthenticator: rows[0].via_authenticator,
     };
   }
 
@@ -257,7 +261,7 @@ export class BiometricsService {
         'unknown_credential',
         'No user is registered for this credential',
       );
-    return this.punch(owner, kind !== 'authenticator');
+    return this.punch(owner, !owner.viaAuthenticator);
   }
 
   /**

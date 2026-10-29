@@ -53,4 +53,23 @@ export class BiometricsPunchController {
       throw e;
     }
   }
+  @Post('punch/authenticator')
+  async punchAuthenticator(@Body() body: { fingerprint: string }) {
+    if (!body?.fingerprint)
+      throw new BadRequestException("'fingerprint' is required");
+    try {
+      const result = await this.biometricsService.punchByCredential(
+        'authenticator',
+        body.fingerprint,
+      );
+      return SuccessHandler('Punch recorded', 200, result); // onSite: false
+    } catch (e) {
+      if (e instanceof BiometricsError) {
+        if (e.code === 'unknown_credential')
+          throw new NotFoundException(e.message);
+        throw new BadRequestException(e.message);
+      }
+      throw e;
+    }
+  }
 }
