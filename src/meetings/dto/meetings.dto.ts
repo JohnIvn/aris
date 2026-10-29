@@ -76,6 +76,20 @@ export class SaveMeetingDto {
   user_email?: string;
 
   @IsOptional()
+  transcript?: { t: string; who: string; text: string }[] | unknown[];
+
+  @IsOptional()
+  @IsString()
+  transcript_source?: string;
+
+  @IsOptional()
+  participants?: string[] | unknown[];
+
+  @IsOptional()
+  @IsNumber()
+  word_count?: number;
+
+  @IsOptional()
   metadata?: Record<string, unknown>;
 }
 

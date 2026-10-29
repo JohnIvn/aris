@@ -104,7 +104,33 @@ export class MeetingsService {
       const endTime = dto.end_time || endedAtDate.toTimeString().split(' ')[0];
       const info = dto.info || null;
 
-      let status = (dto.status || 'completed').toLowerCase();
+      const transcriptJson = dto.transcript ? JSON.stringify(dto.transcript) : null;
+      const transcriptSource =
+        dto.transcript_source ||
+        (Array.isArray(dto.transcript)
+          ? dto.transcript.map((t: any) => `${t.t || ''} - ${t.who || ''}: ${t.text || ''}`).join('\n')
+          : null);
+      const participantsJson = dto.participants ? JSON.stringify(dto.participants) : null;
+      const wordCount =
+        dto.word_count ||
+        (transcriptSource ? transcriptSource.split(/\s+/).filter(Boolean).length : 0);
+
+      console.log(`\n================== [ARIS BACKEND TERMINAL] MEETING SAVED ==================`);
+      console.log(`Meeting Code: ${meetingCode}`);
+      console.log(`Duration: ${durationMins}m (${durationSecs}s)`);
+      console.log(`Transcript Lines Received: ${Array.isArray(dto.transcript) ? dto.transcript.length : 0}`);
+      if (Array.isArray(dto.transcript) && dto.transcript.length > 0) {
+        dto.transcript.forEach((t: any, idx: number) => {
+          console.log(`  [${idx + 1}] [${t.t || '??'}] ${t.who || 'Unknown'}: ${t.text || ''}`);
+        });
+      } else {
+        console.log(`Transcript: None received in payload`);
+      }
+      console.log(`Participants: ${JSON.stringify(dto.participants || [])}`);
+      console.log(`Word Count: ${wordCount}`);
+      console.log(`============================================================================\n`);
+
+      let status = (dto.status || (dto.transcript ? 'summarized' : 'completed')).toLowerCase();
 
       // Prevent rapid duplicate inserts for the same meeting code within 30 seconds
       if (meetingCode && meetingCode !== 'unknown') {
@@ -120,6 +146,20 @@ export class MeetingsService {
           [meetingCode, professorId],
         );
         if (recentCheck.rows.length > 0) {
+          if (dto.transcript && (!recentCheck.rows[0].transcript || (Array.isArray(recentCheck.rows[0].transcript) && recentCheck.rows[0].transcript.length === 0))) {
+            const updateRes = await client.query(
+              `UPDATE meeting_records
+                  SET transcript = $1,
+                      transcript_source = $2,
+                      participants = COALESCE($3, participants),
+                      word_count = $4,
+                      status = 'summarized'
+                WHERE id = $5
+            RETURNING *`,
+              [transcriptJson, transcriptSource, participantsJson, wordCount, recentCheck.rows[0].id],
+            );
+            return SuccessHandler('Meeting recorded successfully', 200, updateRes.rows[0]);
+          }
           return SuccessHandler('Meeting recorded successfully', 200, recentCheck.rows[0]);
         }
       }
@@ -142,9 +182,13 @@ export class MeetingsService {
             duration_minutes,
             duration_seconds,
             status,
-            info
+            info,
+            transcript,
+            transcript_source,
+            participants,
+            word_count
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
           )
           RETURNING *;
         `;
@@ -164,6 +208,10 @@ export class MeetingsService {
           durationSecs,
           status,
           info,
+          transcriptJson,
+          transcriptSource,
+          participantsJson,
+          wordCount,
         ]);
         recordRow = res.rows[0];
       } catch (err: unknown) {
@@ -187,9 +235,13 @@ export class MeetingsService {
               duration_minutes,
               duration_seconds,
               status,
-              info
+              info,
+              transcript,
+              transcript_source,
+              participants,
+              word_count
             ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
             )
             RETURNING *;
           `,
@@ -208,6 +260,10 @@ export class MeetingsService {
               durationSecs,
               status,
               info,
+              transcriptJson,
+              transcriptSource,
+              participantsJson,
+              wordCount,
             ],
           );
           recordRow = fallbackRes.rows[0];
@@ -375,9 +431,17 @@ export class MeetingsService {
           });
         }
 
+        let parsedParticipants = Array.isArray(row.participants) ? row.participants : null;
+        if (!parsedParticipants && typeof row.participants === 'string') {
+          try {
+            const p = JSON.parse(row.participants);
+            if (Array.isArray(p)) parsedParticipants = p;
+          } catch {}
+        }
+
         const participants =
-          Array.isArray(row.participants) && row.participants.length > 0
-            ? row.participants
+          parsedParticipants && parsedParticipants.length > 0
+            ? parsedParticipants
             : [profName, 'Class Consultation'];
 
         const overview =
@@ -413,17 +477,34 @@ export class MeetingsService {
                 },
               ];
 
+        let parsedTranscript: { t: string; who: string; text: string }[] | null = null;
+        if (Array.isArray(row.transcript)) {
+          parsedTranscript = row.transcript;
+        } else if (typeof row.transcript === 'string') {
+          try {
+            const parsed = JSON.parse(row.transcript);
+            if (Array.isArray(parsed)) parsedTranscript = parsed;
+          } catch {}
+        }
+
         const transcript =
-          Array.isArray(row.transcript) && row.transcript.length > 0
-            ? row.transcript
+          parsedTranscript && parsedTranscript.length > 0
+            ? parsedTranscript
             : row.transcript_source
-            ? [
-                {
-                  t: timeDisplay.split('–')[0]?.trim() || 'Start',
-                  who: profName,
-                  text: row.transcript_source,
-                },
-              ]
+            ? row.transcript_source
+                .split('\n')
+                .filter(Boolean)
+                .map((line: string) => {
+                  const match = line.match(/^(\d{1,2}:\d{2}(?:\s*[AP]M)?)\s*-\s*([^:]+):\s*(.*)$/i);
+                  if (match) {
+                    return { t: match[1].trim(), who: match[2].trim(), text: match[3].trim() };
+                  }
+                  return {
+                    t: timeDisplay.split('–')[0]?.trim() || 'Start',
+                    who: profName,
+                    text: line.trim(),
+                  };
+                })
             : [
                 {
                   t: timeDisplay.split('–')[0]?.trim() || 'Start',

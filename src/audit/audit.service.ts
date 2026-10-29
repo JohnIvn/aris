@@ -24,6 +24,8 @@ export interface AuditRecordPayload {
   reviewer: string;
   reviewedAt: string;
   remark: string;
+  email?: string;
+  userId?: string;
 }
 
 export interface AuditLogItem {
@@ -36,6 +38,9 @@ export interface AuditLogItem {
   time: string;
   result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending';
   stage?: string;
+  stage_role?: string;
+  stage_key?: string;
+  approval_stage?: string;
   stage_order?: number;
   payroll_availability?: boolean;
   payroll_received?: boolean;
@@ -178,7 +183,8 @@ export class AuditService {
           d.updated_at,
           COALESCE(up.firstname || ' ' || up.lastname, 'Faculty') AS faculty_name,
           up.employee_id,
-          up.department
+          up.department,
+          up.email
         FROM dtr d
         LEFT JOIN user_professors up ON up.id = d.professor_id
         ORDER BY d.shift_date DESC
@@ -186,7 +192,7 @@ export class AuditService {
 
       // 5. Fetch all professors to detect missing submissions
       const profsRes = await this.client.query(`
-        SELECT id, employee_id, firstname, lastname, department, position, is_banned
+        SELECT id, employee_id, email, firstname, lastname, department, position, is_banned
           FROM user_professors
          WHERE is_banned = FALSE
          LIMIT 20
@@ -239,36 +245,53 @@ export class AuditService {
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
 
         // Determine result and action
-        let result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending' = 'Submitted';
+        let result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending' = 'Pending';
         let action = 'AR submitted';
 
         if (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks)) {
           result = 'Rejected';
-          action = 'AR rejected by Department';
+          action = 'AR rejected · Returned for correction';
         } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {
-          result = 'Approved';
+          result = ar.payroll_availability || ar.payroll_received ? 'Approved' : 'Pending';
           action = ar.payroll_received
             ? 'AR approved · Payroll received'
             : ar.payroll_availability
             ? 'AR approved · Payroll released'
-            : 'AR approved by Accounting';
-        } else if (ar.approval_stage === 'AR-AP-STG-3') {
-          result = 'Approved';
-          action = 'AR endorsed by HR';
-        } else if (ar.approval_stage === 'AR-AP-STG-2') {
-          result = 'Submitted';
-          action = 'AR endorsed by Department';
+            : 'AR in Accounting validation';
+        } else if (ar.approval_stage === 'AR-AP-STG-3' || ar.stage_order === 3) {
+          result = 'Pending';
+          action = 'AR endorsed by Secretary · In HR review';
+        } else if (ar.approval_stage === 'AR-AP-STG-2' || ar.stage_order === 2) {
+          result = 'Pending';
+          action = 'AR verified by Checker · In Department review';
         } else {
-          result = 'Submitted';
+          result = 'Pending';
           action = 'AR submitted · Pending review';
         }
 
+        const stageRole =
+          ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4
+            ? 'Accounting'
+            : ar.approval_stage === 'AR-AP-STG-3' || ar.stage_order === 3
+            ? 'HR'
+            : ar.approval_stage === 'AR-AP-STG-2' || ar.stage_order === 2
+            ? 'Secretary'
+            : 'Checker';
+
         const target = `${periodStr} · ${entryCount} outputs`;
-        const reviewer = ar.stage_label ? `${ar.stage_label} Office` : 'Department Head';
+        const reviewer =
+          stageRole === 'Checker'
+            ? 'Faculty Checker'
+            : stageRole === 'Secretary'
+            ? 'College Secretary'
+            : stageRole === 'HR'
+            ? 'Human Resources'
+            : 'Payroll Office';
+
         const remarkText =
           ar.remarks ||
-          `Current Stage: ${ar.stage_label} · ${
-            ar.payroll_availability
+          `Current Stage: ${stageRole} (${ar.approval_stage}) · ${
+            result === 'Approved'
               ? 'Payroll availability verified'
               : 'Awaiting subsequent endorsement'
           }`;
@@ -282,7 +305,10 @@ export class AuditService {
           target,
           time: formatTime(ar.updated_at || ar.created_at),
           result,
-          stage: ar.stage_label,
+          stage: ar.stage_label || stageRole,
+          stage_role: stageRole,
+          stage_key: ar.approval_stage,
+          approval_stage: ar.approval_stage,
           stage_order: ar.stage_order,
           payroll_availability: ar.payroll_availability,
           payroll_received: ar.payroll_received,
@@ -292,6 +318,8 @@ export class AuditService {
             facultyName: ar.faculty_name,
             facultyNumber: ar.faculty_no || '—',
             college: ar.department,
+            email: ar.email,
+            userId: ar.user_id,
             tables,
             topics: topics || 'Curriculum delivery, student mentorship, and laboratory activities.',
             tasks: tasks || 'Conducted scheduled lectures, prepared modules, and submitted grade records.',
@@ -339,7 +367,7 @@ export class AuditService {
           },
         ];
 
-        let result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending' = 'Submitted';
+        let result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending' = 'Pending';
         let action = 'DTR submitted';
 
         if (daysLogged >= 20) {
@@ -349,7 +377,7 @@ export class AuditService {
           result = 'Flagged';
           action = 'DTR flagged · Incomplete logs';
         } else {
-          result = 'Submitted';
+          result = 'Pending';
           action = 'DTR logged · Pending HR verification';
         }
 
@@ -365,12 +393,19 @@ export class AuditService {
           target,
           time: formatTime(first.updated_at || first.created_at),
           result,
+          stage: 'HR',
+          stage_role: 'HR',
+          stage_key: 'AR-AP-STG-3',
+          approval_stage: 'AR-AP-STG-3',
+          stage_order: 3,
           record: {
             period: periodStr,
             reference: refStr,
             facultyName: first.faculty_name,
             facultyNumber: first.employee_id || '—',
             college: first.department || 'Academic Department',
+            email: first.email,
+            userId: first.professor_id,
             tables,
             attachment: `DTR_${first.faculty_name.replace(/[^a-zA-Z]/g, '')}_Logged.xlsx · 92 KB`,
             reviewer: 'HR Office — Biometric Validation',
@@ -403,6 +438,8 @@ export class AuditService {
               facultyName: profName,
               facultyNumber: prof.employee_id || '—',
               college: prof.department || 'Academic Department',
+              email: prof.email,
+              userId: prof.id,
               tables: [],
               reviewer: 'HR & Academic Office',
               reviewedAt: `${formatDate(new Date())} · 08:00 AM`,
@@ -440,14 +477,26 @@ export class AuditService {
             l.action.toLowerCase().includes(q) ||
             l.target.toLowerCase().includes(q) ||
             l.record.reference.toLowerCase().includes(q) ||
-            (l.record.college && l.record.college.toLowerCase().includes(q)),
+            (l.record.college && l.record.college.toLowerCase().includes(q)) ||
+            (l.record.email && l.record.email.toLowerCase().includes(q)),
+        );
+      }
+
+      if (filters.email?.trim()) {
+        const targetEmail = filters.email.trim().toLowerCase();
+        filtered = filtered.filter(
+          (l) =>
+            (l.record.email && l.record.email.toLowerCase() === targetEmail) ||
+            (l.record.facultyNumber && l.record.facultyNumber.toLowerCase() === targetEmail) ||
+            l.actor.toLowerCase().includes(targetEmail),
         );
       }
 
       // Compute stats
       const stats = {
         total: auditLogs.length,
-        submitted: auditLogs.filter((l) => l.result === 'Submitted').length,
+        submitted: auditLogs.filter((l) => l.result === 'Submitted' || l.result === 'Pending').length,
+        pending: auditLogs.filter((l) => l.result === 'Pending').length,
         approved: auditLogs.filter((l) => l.result === 'Approved').length,
         rejected: auditLogs.filter((l) => l.result === 'Rejected').length,
         flagged: auditLogs.filter((l) => l.result === 'Flagged').length,
