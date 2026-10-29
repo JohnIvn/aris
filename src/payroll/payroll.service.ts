@@ -146,10 +146,10 @@ export class PayrollService {
         if (recordedReportIds.has(ar.id)) continue;
 
         let status: 'Approved' | 'Pending' | 'Rejected' = 'Pending';
-        if (ar.remarks && /reject|disapprov|return/i.test(ar.remarks)) {
-          status = 'Rejected';
-        } else if (ar.payroll_availability || ar.approval_stage === 'AR-AP-STG-4') {
+        if (ar.payroll_availability || ar.approval_stage === 'AR-AP-STG-4') {
           status = 'Approved';
+        } else if (ar.remarks && /reject|disapprov/i.test(ar.remarks) && !/resubmit/i.test(ar.remarks)) {
+          status = 'Rejected';
         }
 
         const hours = Number(ar.calculated_hours) || 30;

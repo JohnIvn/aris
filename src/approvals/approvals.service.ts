@@ -489,7 +489,8 @@ export class ApprovalsService {
           (currentStageRole === 'Accounting' ||
             currentStageKey === 'AR-AP-STG-4' ||
             stage === 'Accounting' ||
-            role === 'Accounting');
+            role === 'Accounting' ||
+            (user as any)?.position === 'Accounting');
 
         let payrollResult: any = null;
 
