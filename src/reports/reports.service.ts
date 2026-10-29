@@ -637,6 +637,8 @@ export class ReportsService {
         return ErrorHandler('No DTR Found in that date period', 404);
       }
 
+      console.log('DTR Calculation: ', dtrs);
+
       const totalHrs = this.calculateDtrHrTally(dtrs);
 
       return totalHrs;
