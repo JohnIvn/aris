@@ -12,6 +12,7 @@ import { createAdminLogs } from './models/admin_logs.model';
 import { createSessions } from './models/sessions.model';
 import createReports from './models/reports.model';
 import { createPayrollLogs } from './models/payroll_logs.model';
+import { createPayrollModel } from './models/payroll.model';
 import { createSystemSettings } from './models/system_settings.model';
 import { createLoginAttempts } from './models/login_attempts.model';
 import { createSubmissions } from './models/submissions.model';
@@ -110,6 +111,7 @@ export class DatabaseService implements OnModuleInit {
       await createReports(this.pool);
       await createReportEntries(this.pool);
       await createPayrollLogs(this.pool);
+      await createPayrollModel(this.pool);
       await createSystemSettings(this.pool);
       await createLoginAttempts(this.pool);
       await createSubmissions(this.pool);

@@ -24,7 +24,7 @@ import { Roles } from '../lib/decorators/roles.decorator';
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 
-  @Roles('admin')
+  @Roles('admin', 'staff')
   @UseGuards(JwtCookieGuard)
   @Get()
   async fetchPayrolls(
