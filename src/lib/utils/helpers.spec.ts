@@ -10,7 +10,7 @@ describe('Cross-role uniqueness validation helpers', () => {
   beforeEach(() => {
     mockClient = {
       query: jest.fn(),
-    } as unknown as jest.Mocked<Pick<Pool, 'query'>>;
+    };
   });
 
   describe('findDuplicateEmailAcrossRoles', () => {
@@ -135,4 +135,3 @@ describe('Cross-role uniqueness validation helpers', () => {
     });
   });
 });
-

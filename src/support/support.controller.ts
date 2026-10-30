@@ -78,10 +78,7 @@ export class SupportController {
   }
 
   @Patch('messages/:id/read')
-  markAsRead(
-    @CurrentUser() user: UserSession,
-    @Param('id') id: string,
-  ) {
+  markAsRead(@CurrentUser() user: UserSession, @Param('id') id: string) {
     return this.supportService.markAsRead(user, id);
   }
 }

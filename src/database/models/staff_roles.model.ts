@@ -17,10 +17,26 @@ export async function createStaffRoles(client: Pool) {
 
   // Seed default staff roles if table is empty or missing them
   const defaultRoles = [
-    ['HR', 'HR', 'Human Resources staff responsible for employee records and validation'],
-    ['Checker', 'CHK', 'Attendance and document checker for preliminary review'],
-    ['Secretary', 'SEC', 'College or department secretary managing endorsements and schedules'],
-    ['Accounting', 'ACC', 'Accounting and payroll staff handling payroll verification and clearance'],
+    [
+      'HR',
+      'HR',
+      'Human Resources staff responsible for employee records and validation',
+    ],
+    [
+      'Checker',
+      'CHK',
+      'Attendance and document checker for preliminary review',
+    ],
+    [
+      'Secretary',
+      'SEC',
+      'College or department secretary managing endorsements and schedules',
+    ],
+    [
+      'Accounting',
+      'ACC',
+      'Accounting and payroll staff handling payroll verification and clearance',
+    ],
   ];
 
   for (const [name, code, desc] of defaultRoles) {
@@ -32,4 +48,3 @@ export async function createStaffRoles(client: Pool) {
     );
   }
 }
-

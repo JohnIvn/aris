@@ -39,8 +39,11 @@ export function resolveFacultyRate(
   config: PayrollConfig = DEFAULT_PAYROLL_CONFIG,
 ): number {
   if (!config.enableRankPricing) return Number(config.baseHourlyRate) || 500;
-  const pos = String(position || '').toLowerCase().trim();
-  if (/dept|department\s*head/i.test(pos)) return Number(config.departmentHeadRate) || 900;
+  const pos = String(position || '')
+    .toLowerCase()
+    .trim();
+  if (/dept|department\s*head/i.test(pos))
+    return Number(config.departmentHeadRate) || 900;
   if (/assoc/i.test(pos)) return Number(config.associateProfRate) || 650;
   if (/assist/i.test(pos)) return Number(config.assistantProfRate) || 500;
   if (/prof/i.test(pos)) return Number(config.professorRate) || 800;
@@ -106,4 +109,3 @@ export function computePayrollAmount(
     formula,
   };
 }
-

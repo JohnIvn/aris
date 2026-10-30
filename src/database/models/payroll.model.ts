@@ -31,4 +31,3 @@ export async function createPayrollModel(client: Pool) {
     CREATE INDEX IF NOT EXISTS idx_payroll_status ON payroll (status);
   `);
 }
-

@@ -36,7 +36,8 @@ export interface AuditLogItem {
   action: string;
   target: string;
   time: string;
-  result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending';
+  result:
+    'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending';
   stage?: string;
   stage_role?: string;
   stage_key?: string;
@@ -82,7 +83,10 @@ function formatDate(date: Date | string | null): string {
 
 function getInitials(name: string): string {
   if (!name) return 'PR';
-  const parts = name.replace(/^(Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s*/i, '').trim().split(/\s+/);
+  const parts = name
+    .replace(/^(Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s*/i, '')
+    .trim()
+    .split(/\s+/);
   if (parts.length >= 2) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
@@ -106,9 +110,15 @@ export class AuditService {
           FROM approval_stages
          ORDER BY stage_order ASC
       `);
-      const stagesMap = new Map<string, { label: string; stage_order: number }>();
+      const stagesMap = new Map<
+        string,
+        { label: string; stage_order: number }
+      >();
       stagesRes.rows.forEach((s) => {
-        stagesMap.set(s.stage_key, { label: s.label, stage_order: s.stage_order });
+        stagesMap.set(s.stage_key, {
+          label: s.label,
+          stage_order: s.stage_order,
+        });
       });
 
       // 2. Fetch accomplishment reports with joined faculty data
@@ -215,11 +225,16 @@ export class AuditService {
 
         const tables: AuditRecordTable[] = [];
         courseGroups.forEach((groupEntries, key) => {
-          const startDate = groupEntries[0]?.class_date ? formatDate(groupEntries[0].class_date) : '';
+          const startDate = groupEntries[0]?.class_date
+            ? formatDate(groupEntries[0].class_date)
+            : '';
           const endDate = groupEntries[groupEntries.length - 1]?.class_date
             ? formatDate(groupEntries[groupEntries.length - 1].class_date)
             : '';
-          const meta = startDate && endDate ? `${startDate} – ${endDate}` : `${groupEntries.length} sessions`;
+          const meta =
+            startDate && endDate
+              ? `${startDate} – ${endDate}`
+              : `${groupEntries.length} sessions`;
 
           const rows = groupEntries.map((e) => [
             e.code || '—',
@@ -238,30 +253,49 @@ export class AuditService {
           });
         });
 
-        const topics = Array.from(new Set(entries.map((e) => e.topics).filter(Boolean))).join('\n');
-        const tasks = Array.from(new Set(entries.map((e) => e.description).filter(Boolean))).join('\n');
+        const topics = Array.from(
+          new Set(entries.map((e) => e.topics).filter(Boolean)),
+        ).join('\n');
+        const tasks = Array.from(
+          new Set(entries.map((e) => e.description).filter(Boolean)),
+        ).join('\n');
 
         const periodStr = `${formatDate(ar.period_start)} – ${formatDate(ar.period_end)}`;
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
 
         // Determine result and action
-        let result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending' = 'Pending';
+        let result:
+          | 'Submitted'
+          | 'Approved'
+          | 'Rejected'
+          | 'Flagged'
+          | 'Missing'
+          | 'Pending' = 'Pending';
         let action = 'AR submitted';
 
         if (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks)) {
           result = 'Rejected';
           action = 'AR rejected · Returned for correction';
         } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {
-          result = ar.payroll_availability || ar.payroll_received ? 'Approved' : 'Pending';
+          result =
+            ar.payroll_availability || ar.payroll_received
+              ? 'Approved'
+              : 'Pending';
           action = ar.payroll_received
             ? 'AR approved · Payroll received'
             : ar.payroll_availability
-            ? 'AR approved · Payroll released'
-            : 'AR in Accounting validation';
-        } else if (ar.approval_stage === 'AR-AP-STG-3' || ar.stage_order === 3) {
+              ? 'AR approved · Payroll released'
+              : 'AR in Accounting validation';
+        } else if (
+          ar.approval_stage === 'AR-AP-STG-3' ||
+          ar.stage_order === 3
+        ) {
           result = 'Pending';
           action = 'AR endorsed by Secretary · In HR review';
-        } else if (ar.approval_stage === 'AR-AP-STG-2' || ar.stage_order === 2) {
+        } else if (
+          ar.approval_stage === 'AR-AP-STG-2' ||
+          ar.stage_order === 2
+        ) {
           result = 'Pending';
           action = 'AR verified by Checker · In Department review';
         } else {
@@ -273,20 +307,20 @@ export class AuditService {
           ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4
             ? 'Accounting'
             : ar.approval_stage === 'AR-AP-STG-3' || ar.stage_order === 3
-            ? 'HR'
-            : ar.approval_stage === 'AR-AP-STG-2' || ar.stage_order === 2
-            ? 'Secretary'
-            : 'Checker';
+              ? 'HR'
+              : ar.approval_stage === 'AR-AP-STG-2' || ar.stage_order === 2
+                ? 'Secretary'
+                : 'Checker';
 
         const target = `${periodStr} · ${entryCount} outputs`;
         const reviewer =
           stageRole === 'Checker'
             ? 'Faculty Checker'
             : stageRole === 'Secretary'
-            ? 'College Secretary'
-            : stageRole === 'HR'
-            ? 'Human Resources'
-            : 'Payroll Office';
+              ? 'College Secretary'
+              : stageRole === 'HR'
+                ? 'Human Resources'
+                : 'Payroll Office';
 
         const remarkText =
           ar.remarks ||
@@ -321,8 +355,12 @@ export class AuditService {
             email: ar.email,
             userId: ar.user_id,
             tables,
-            topics: topics || 'Curriculum delivery, student mentorship, and laboratory activities.',
-            tasks: tasks || 'Conducted scheduled lectures, prepared modules, and submitted grade records.',
+            topics:
+              topics ||
+              'Curriculum delivery, student mentorship, and laboratory activities.',
+            tasks:
+              tasks ||
+              'Conducted scheduled lectures, prepared modules, and submitted grade records.',
             notes: ar.remarks || undefined,
             attachment: `${ar.faculty_name.replace(/[^a-zA-Z]/g, '')}_Accomplishment_Report.pdf · 1.4 MB`,
             reviewer,
@@ -345,18 +383,22 @@ export class AuditService {
         if (!logs.length) return;
         const first = logs[0];
         const daysLogged = logs.length;
-        const totalHours = logs.reduce((acc, r) => acc + (Number(r.total_hours) || 0), 0).toFixed(1);
+        const totalHours = logs
+          .reduce((acc, r) => acc + (Number(r.total_hours) || 0), 0)
+          .toFixed(1);
 
         const startDate = formatDate(logs[logs.length - 1]?.shift_date);
         const endDate = formatDate(logs[0]?.shift_date);
         const periodStr = `${startDate} – ${endDate}`;
 
-        const rows = logs.slice(0, 15).map((l) => [
-          formatDate(l.shift_date),
-          formatTime(l.time_in ? `1970-01-01T${l.time_in}` : null),
-          formatTime(l.time_out ? `1970-01-01T${l.time_out}` : null),
-          Number(l.total_hours) || 0,
-        ]);
+        const rows = logs
+          .slice(0, 15)
+          .map((l) => [
+            formatDate(l.shift_date),
+            formatTime(l.time_in ? `1970-01-01T${l.time_in}` : null),
+            formatTime(l.time_out ? `1970-01-01T${l.time_out}` : null),
+            Number(l.total_hours) || 0,
+          ]);
 
         const tables: AuditRecordTable[] = [
           {
@@ -367,7 +409,13 @@ export class AuditService {
           },
         ];
 
-        let result: 'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending' = 'Pending';
+        let result:
+          | 'Submitted'
+          | 'Approved'
+          | 'Rejected'
+          | 'Flagged'
+          | 'Missing'
+          | 'Pending' = 'Pending';
         let action = 'DTR submitted';
 
         if (daysLogged >= 20) {
@@ -443,7 +491,8 @@ export class AuditService {
               tables: [],
               reviewer: 'HR & Academic Office',
               reviewedAt: `${formatDate(new Date())} · 08:00 AM`,
-              remark: 'No Accomplishment Report has been filed for this cycle. Reminder notice dispatched to faculty and department head.',
+              remark:
+                'No Accomplishment Report has been filed for this cycle. Reminder notice dispatched to faculty and department head.',
             },
           });
         }
@@ -487,7 +536,8 @@ export class AuditService {
         filtered = filtered.filter(
           (l) =>
             (l.record.email && l.record.email.toLowerCase() === targetEmail) ||
-            (l.record.facultyNumber && l.record.facultyNumber.toLowerCase() === targetEmail) ||
+            (l.record.facultyNumber &&
+              l.record.facultyNumber.toLowerCase() === targetEmail) ||
             l.actor.toLowerCase().includes(targetEmail),
         );
       }
@@ -495,7 +545,9 @@ export class AuditService {
       // Compute stats
       const stats = {
         total: auditLogs.length,
-        submitted: auditLogs.filter((l) => l.result === 'Submitted' || l.result === 'Pending').length,
+        submitted: auditLogs.filter(
+          (l) => l.result === 'Submitted' || l.result === 'Pending',
+        ).length,
         pending: auditLogs.filter((l) => l.result === 'Pending').length,
         approved: auditLogs.filter((l) => l.result === 'Approved').length,
         rejected: auditLogs.filter((l) => l.result === 'Rejected').length,
@@ -529,7 +581,11 @@ export class AuditService {
         FROM approval_stages ast
         ORDER BY ast.stage_order ASC
       `);
-      return SuccessHandler('Approval stages fetched successfully', 200, result.rows);
+      return SuccessHandler(
+        'Approval stages fetched successfully',
+        200,
+        result.rows,
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -550,11 +606,18 @@ export class AuditService {
           FROM accomplishment_reports
         `),
         this.client.query('SELECT COUNT(*)::int AS count FROM dtr'),
-        this.client.query('SELECT COUNT(*)::int AS count FROM approval_stages WHERE is_active = TRUE'),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM approval_stages WHERE is_active = TRUE',
+        ),
       ]);
 
       return SuccessHandler('Audit statistics fetched successfully', 200, {
-        reports: arCounts.rows[0] ?? { total: 0, approved: 0, pending: 0, rejected: 0 },
+        reports: arCounts.rows[0] ?? {
+          total: 0,
+          approved: 0,
+          pending: 0,
+          rejected: 0,
+        },
         dtr_entries: dtrCount.rows[0]?.count ?? 0,
         active_stages: stagesCount.rows[0]?.count ?? 0,
       });

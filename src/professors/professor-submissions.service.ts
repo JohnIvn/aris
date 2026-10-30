@@ -29,13 +29,6 @@ export interface LatestSubmission {
   currentSince: string;
 }
 
-const STAGE_KEY_MAP: Record<string, string> = {
-  'AR-AP-STG-1': 'Checker',
-  'AR-AP-STG-2': 'Secretary',
-  'AR-AP-STG-3': 'HR',
-  'AR-AP-STG-4': 'Accounting',
-};
-
 function formatDisplayDate(d: Date | string | null): string {
   if (!d) return '—';
   const date = new Date(d);
@@ -49,38 +42,35 @@ function formatDisplayDate(d: Date | string | null): string {
   });
 }
 
-function formatMonthDay(d: Date | string | null): string {
-  if (!d) return '—';
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return String(d);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function toDbStatus(s: string | undefined): 'pending' | 'approved' | 'rejected' | 'disapproved' | 'submitted' {
+function toDbStatus(
+  s: string | undefined,
+): 'pending' | 'approved' | 'rejected' | 'disapproved' | 'submitted' {
   const lower = String(s || 'pending').toLowerCase();
-  if (['pending', 'approved', 'rejected', 'disapproved', 'submitted', 'draft', 'flagged', 'missing'].includes(lower)) {
+  if (
+    [
+      'pending',
+      'approved',
+      'rejected',
+      'disapproved',
+      'submitted',
+      'draft',
+      'flagged',
+      'missing',
+    ].includes(lower)
+  ) {
     return lower as any;
   }
   return 'pending';
 }
 
-function toTitleCaseStatus(s: string | null | undefined): 'Pending' | 'Approved' | 'Rejected' | 'Disapproved' {
-  if (!s) return 'Pending';
-  const lower = s.toLowerCase();
-  if (lower === 'approved') return 'Approved';
-  if (lower === 'rejected') return 'Rejected';
-  if (lower === 'disapproved') return 'Disapproved';
-  return 'Pending';
-}
-
-function parseCampus(c: string | undefined): 'south' | 'congress' | 'camarin' | 'bagong silang' {
+function parseCampus(
+  c: string | undefined,
+): 'south' | 'congress' | 'camarin' | 'bagong silang' {
   const lower = (c || '').toLowerCase();
   if (lower.includes('south')) return 'south';
   if (lower.includes('camarin')) return 'camarin';
-  if (lower.includes('bagong') || lower.includes('silang')) return 'bagong silang';
+  if (lower.includes('bagong') || lower.includes('silang'))
+    return 'bagong silang';
   return 'congress';
 }
 
@@ -115,7 +105,12 @@ export class ProfessorSubmissionsService {
     return this.databaseService.getClient();
   }
 
-  private async resolveProfessor(user?: UserSession, emailQuery?: string, nameQuery?: string, empIdQuery?: string) {
+  private async resolveProfessor(
+    user?: UserSession,
+    emailQuery?: string,
+    nameQuery?: string,
+    empIdQuery?: string,
+  ) {
     const targetEmail = user?.email || emailQuery || null;
     const targetId = user?.id || null;
 
@@ -144,9 +139,11 @@ export class ProfessorSubmissionsService {
     }
 
     if (nameQuery && nameQuery.trim()) {
-      const cleanName = nameQuery.replace(/^(Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s*/i, '').trim();
+      const cleanName = nameQuery
+        .replace(/^(Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s*/i, '')
+        .trim();
       const res = await this.client.query(
-        'SELECT * FROM user_professors WHERE LOWER(firstname || \' \' || lastname) LIKE LOWER($1) OR LOWER(lastname) LIKE LOWER($2) LIMIT 1',
+        "SELECT * FROM user_professors WHERE LOWER(firstname || ' ' || lastname) LIKE LOWER($1) OR LOWER(lastname) LIKE LOWER($2) LIMIT 1",
         [`%${cleanName}%`, `%${cleanName}%`],
       );
       if (res.rows.length > 0) return res.rows[0];
@@ -161,16 +158,20 @@ export class ProfessorSubmissionsService {
 
   async createAccomplishmentReport(user: UserSession | undefined, data: any) {
     try {
-      const type: 'AR' | 'DTR' = (data.type === 'DTR' || data.recordType?.includes('DTR')) ? 'DTR' : 'AR';
+      const type: 'AR' | 'DTR' =
+        data.type === 'DTR' || data.recordType?.includes('DTR') ? 'DTR' : 'AR';
       const recordPayload = data.record || data;
       const rawReference: string =
         data.reference ||
         recordPayload.reference ||
-        (data.id && typeof data.id === 'string' && !data.id.includes('-') ? data.id : '') ||
+        (data.id && typeof data.id === 'string' && !data.id.includes('-')
+          ? data.id
+          : '') ||
         '';
       const reference: string = rawReference || `${type}-${Date.now()}`;
       const period: string = data.period || 'Current Cycle';
-      const units: string = data.units || (type === 'AR' ? '3 courses' : '22 days');
+      const units: string =
+        data.units || (type === 'AR' ? '3 courses' : '22 days');
       const dbStatus = toDbStatus(data.status);
       const event: string = data.event || `${type} submitted · ${period}`;
       const userEmail =
@@ -181,7 +182,7 @@ export class ProfessorSubmissionsService {
         recordPayload.facultyEmail ||
         null;
       const userName =
-        ((user as any)?.name) ||
+        (user as any)?.name ||
         data.facultyName ||
         data.name ||
         recordPayload.facultyName ||
@@ -195,20 +196,46 @@ export class ProfessorSubmissionsService {
       const topics = recordPayload.topics || null;
       const notes = recordPayload.notes || null;
 
-      const prof = await this.resolveProfessor(user, userEmail, userName, userEmpId);
+      const prof = await this.resolveProfessor(
+        user,
+        userEmail,
+        userName,
+        userEmpId,
+      );
       const profId = prof?.id || '00000000-0000-0000-0000-000000000001';
       const employeeId = prof?.employee_id || userEmpId || 'P00001';
-      const facultyNo = recordPayload.facultyNumber || prof?.employee_id || employeeId;
+      const facultyNo =
+        recordPayload.facultyNumber || prof?.employee_id || employeeId;
 
       let reportId: string | null = null;
 
       // 1. Primary insert or update directly into accomplishment_reports & report_entries
       if (type === 'AR') {
         let existingReportId: string | null =
-          (data.report_id && typeof data.report_id === 'string' && data.report_id.includes('-') && data.report_id.length === 36 ? data.report_id : null) ||
-          (data.id && typeof data.id === 'string' && data.id.includes('-') && data.id.length === 36 ? data.id : null) ||
-          (recordPayload.id && typeof recordPayload.id === 'string' && recordPayload.id.includes('-') && recordPayload.id.length === 36 ? recordPayload.id : null) ||
-          (recordPayload.report_id && typeof recordPayload.report_id === 'string' && recordPayload.report_id.includes('-') && recordPayload.report_id.length === 36 ? recordPayload.report_id : null);
+          (data.report_id &&
+          typeof data.report_id === 'string' &&
+          data.report_id.includes('-') &&
+          data.report_id.length === 36
+            ? data.report_id
+            : null) ||
+          (data.id &&
+          typeof data.id === 'string' &&
+          data.id.includes('-') &&
+          data.id.length === 36
+            ? data.id
+            : null) ||
+          (recordPayload.id &&
+          typeof recordPayload.id === 'string' &&
+          recordPayload.id.includes('-') &&
+          recordPayload.id.length === 36
+            ? recordPayload.id
+            : null) ||
+          (recordPayload.report_id &&
+          typeof recordPayload.report_id === 'string' &&
+          recordPayload.report_id.includes('-') &&
+          recordPayload.report_id.length === 36
+            ? recordPayload.report_id
+            : null);
 
         if (!existingReportId && reference) {
           const subCheck = await this.client.query(
@@ -234,7 +261,10 @@ export class ProfessorSubmissionsService {
           }
         }
 
-        if (!existingReportId && (data.is_revision || data.isRevision || data.status === 'Pending')) {
+        if (
+          !existingReportId &&
+          (data.is_revision || data.isRevision || data.status === 'Pending')
+        ) {
           const revCheck = await this.client.query(
             `SELECT id FROM accomplishment_reports 
               WHERE (user_id = $1 OR employee_id = $2 OR faculty_no = $3)
@@ -270,7 +300,10 @@ export class ProfessorSubmissionsService {
           );
           if (repRes.rows.length > 0) {
             reportId = repRes.rows[0].id;
-            await this.client.query(`DELETE FROM report_entries WHERE report_id = $1`, [reportId]);
+            await this.client.query(
+              `DELETE FROM report_entries WHERE report_id = $1`,
+              [reportId],
+            );
           }
         }
 
@@ -284,7 +317,12 @@ export class ProfessorSubmissionsService {
             )
             RETURNING id;
             `,
-            [profId, employeeId, facultyNo, notes || 'Submitted from ARIS Desktop'],
+            [
+              profId,
+              employeeId,
+              facultyNo,
+              notes || 'Submitted from ARIS Desktop',
+            ],
           );
           reportId = repRes.rows[0]?.id || null;
         }
@@ -292,8 +330,12 @@ export class ProfessorSubmissionsService {
         if (reportId && Array.isArray(recordPayload.tables)) {
           for (const tbl of recordPayload.tables) {
             const courseTitle = tbl.title || 'General Course';
-            const courseTopics = tbl.topics || recordPayload.topics || 'Course syllabus alignment';
-            const courseTasks = tbl.tasks || recordPayload.tasks || 'Lecture and Discussion, Activity';
+            const courseTopics =
+              tbl.topics || recordPayload.topics || 'Course syllabus alignment';
+            const courseTasks =
+              tbl.tasks ||
+              recordPayload.tasks ||
+              'Lecture and Discussion, Activity';
             if (Array.isArray(tbl.rows)) {
               for (const row of tbl.rows) {
                 const code = String(row[0] || 'CC 105');
@@ -306,8 +348,8 @@ export class ProfessorSubmissionsService {
                 const [startRaw, endRaw] = timeStr.includes('–')
                   ? timeStr.split('–')
                   : timeStr.includes('-')
-                  ? timeStr.split('-')
-                  : [timeStr, '11:00AM'];
+                    ? timeStr.split('-')
+                    : [timeStr, '11:00AM'];
 
                 const shiftStart = parseSqlTime(startRaw, '08:00:00');
                 const shiftEnd = parseSqlTime(endRaw, '11:00:00');
@@ -368,7 +410,9 @@ export class ProfessorSubmissionsService {
           `,
           [
             JSON.stringify(recordPayload),
-            event.includes('resubmit') ? event : `AR resubmitted with corrections · ${period}`,
+            event.includes('resubmit')
+              ? event
+              : `AR resubmitted with corrections · ${period}`,
             topics,
             notes,
             'Resubmitted with corrections. Queued for Faculty Checker review.',
@@ -414,30 +458,42 @@ export class ProfessorSubmissionsService {
           );
         }
       } catch (subErr) {
-        console.warn('[ProfessorSubmissionsService] Submissions sync warning:', subErr);
+        console.warn(
+          '[ProfessorSubmissionsService] Submissions sync warning:',
+          subErr,
+        );
       }
 
-      return SuccessHandler('Accomplishment report submitted successfully', 201, {
-        id: reportId || reference,
-        reference,
-        type,
-        period,
-        units,
-        status: 'Pending',
-        stage: 'Checker',
-        stage_role: 'Checker',
-        stage_key: 'AR-AP-STG-1',
-        approval_stage: 'AR-AP-STG-1',
-        stage_order: 1,
-        currentStage: 'Checker',
-        submitted: formatDisplayDate(new Date()),
-        event,
-        record: recordPayload,
-      });
+      return SuccessHandler(
+        'Accomplishment report submitted successfully',
+        201,
+        {
+          id: reportId || reference,
+          reference,
+          type,
+          period,
+          units,
+          status: 'Pending',
+          stage: 'Checker',
+          stage_role: 'Checker',
+          stage_key: 'AR-AP-STG-1',
+          approval_stage: 'AR-AP-STG-1',
+          stage_order: 1,
+          currentStage: 'Checker',
+          submitted: formatDisplayDate(new Date()),
+          event,
+          record: recordPayload,
+        },
+      );
     } catch (error) {
-      console.error('[ProfessorSubmissionsService] Error recording accomplishment report:', error);
+      console.error(
+        '[ProfessorSubmissionsService] Error recording accomplishment report:',
+        error,
+      );
       return ErrorHandler(
-        error instanceof Error ? error.message : 'Failed to record accomplishment report',
+        error instanceof Error
+          ? error.message
+          : 'Failed to record accomplishment report',
         500,
       );
     }
@@ -447,7 +503,10 @@ export class ProfessorSubmissionsService {
     return this.createAccomplishmentReport(user, data);
   }
 
-  async getSubmissions(user?: UserSession, emailQuery?: string): Promise<HistoryRecord[]> {
+  async getSubmissions(
+    user?: UserSession,
+    emailQuery?: string,
+  ): Promise<HistoryRecord[]> {
     try {
       const prof = await this.resolveProfessor(user, emailQuery);
 
@@ -455,71 +514,100 @@ export class ProfessorSubmissionsService {
       const auditResult = await this.auditService.list({
         type: 'All',
       });
-      const allAuditLogs = (auditResult as any)?.data?.logs || (auditResult as any)?.logs || [];
+      const allAuditLogs =
+        (auditResult as any)?.data?.logs || (auditResult as any)?.logs || [];
 
       // Map audit logs to HistoryRecord shape
-      const mappedAuditRecords: HistoryRecord[] = allAuditLogs.map((log: any) => {
-        const stage = log.stage || 'Checker';
-        let status: 'Pending' | 'Approved' | 'Rejected' | 'Disapproved' = 'Pending';
-        if (log.result === 'Approved') status = 'Approved';
-        else if (log.result === 'Rejected') status = 'Rejected';
-        else if (log.result === 'Disapproved') status = 'Disapproved';
+      const mappedAuditRecords: HistoryRecord[] = allAuditLogs.map(
+        (log: any) => {
+          const stage = log.stage || 'Checker';
+          let status: 'Pending' | 'Approved' | 'Rejected' | 'Disapproved' =
+            'Pending';
+          if (log.result === 'Approved') status = 'Approved';
+          else if (log.result === 'Rejected') status = 'Rejected';
+          else if (log.result === 'Disapproved') status = 'Disapproved';
 
-        const units = log.target?.includes('·')
-          ? log.target.split('·')[1].trim()
-          : log.record?.tables?.length
-            ? `${log.record.tables.length} courses`
-            : log.type === 'DTR'
-              ? '22 days'
-              : '3 courses';
-        const period = log.record?.period || (log.target?.includes('·') ? log.target.split('·')[0].trim() : 'Current Cycle');
-        const submitted = log.record?.reviewedAt || log.time || formatDisplayDate(new Date());
+          const units = log.target?.includes('·')
+            ? log.target.split('·')[1].trim()
+            : log.record?.tables?.length
+              ? `${log.record.tables.length} courses`
+              : log.type === 'DTR'
+                ? '22 days'
+                : '3 courses';
+          const period =
+            log.record?.period ||
+            (log.target?.includes('·')
+              ? log.target.split('·')[0].trim()
+              : 'Current Cycle');
+          const submitted =
+            log.record?.reviewedAt || log.time || formatDisplayDate(new Date());
 
-        return {
-          id: log.id || log.record?.reference,
-          type: log.type,
-          period,
-          units,
-          submitted,
-          status,
-          stage,
-          currentStage: stage,
-          event: log.action ? `${log.action} · ${log.target}` : log.target || `${log.type} submitted`,
-          record: log.record,
-        };
-      });
+          return {
+            id: log.id || log.record?.reference,
+            type: log.type,
+            period,
+            units,
+            submitted,
+            status,
+            stage,
+            currentStage: stage,
+            event: log.action
+              ? `${log.action} · ${log.target}`
+              : log.target || `${log.type} submitted`,
+            record: log.record,
+          };
+        },
+      );
 
       // Scope to this professor if user/email is provided
-      const profEmail = (prof?.email || emailQuery || user?.email || '').toLowerCase().trim();
-      const profName = prof ? `${prof.firstname} ${prof.lastname}`.toLowerCase().trim() : ((user as any)?.name || '').toLowerCase().trim();
+      const profEmail = (prof?.email || emailQuery || user?.email || '')
+        .toLowerCase()
+        .trim();
+      const profName = prof
+        ? `${prof.firstname} ${prof.lastname}`.toLowerCase().trim()
+        : ((user as any)?.name || '').toLowerCase().trim();
       const profEmpId = (prof?.employee_id || '').toLowerCase().trim();
 
       const scoped = mappedAuditRecords.filter((r) => {
         const rec = r.record;
         if (!rec) return false;
-        const recEmail = ((rec as any).email || '').toLowerCase().trim();
+        const recEmail = (rec.email || '').toLowerCase().trim();
         const recEmpId = (rec.facultyNumber || '').toLowerCase().trim();
         const recName = (rec.facultyName || '').toLowerCase().trim();
 
         if (profEmail && recEmail && recEmail === profEmail) return true;
         if (profEmpId && recEmpId && recEmpId === profEmpId) return true;
-        if (profName && recName && (recName.includes(profName) || profName.includes(recName))) return true;
+        if (
+          profName &&
+          recName &&
+          (recName.includes(profName) || profName.includes(recName))
+        )
+          return true;
         return false;
       });
 
       // If matched submissions exist for this professor, return them; otherwise return all audit logs
       return scoped.length > 0 ? scoped : mappedAuditRecords;
     } catch (error) {
-      console.error('[ProfessorSubmissionsService] getSubmissions error:', error);
+      console.error(
+        '[ProfessorSubmissionsService] getSubmissions error:',
+        error,
+      );
       return [];
     }
   }
 
-  async getLatestSubmission(user?: UserSession, emailQuery?: string): Promise<LatestSubmission | null> {
+  async getLatestSubmission(
+    user?: UserSession,
+    emailQuery?: string,
+  ): Promise<LatestSubmission | null> {
     const list = await this.getSubmissions(user, emailQuery);
     if (list.length > 0) {
       const top = list[0];
-      const stage = top.currentStage || top.stage || (top.status === 'Approved' ? 'Accounting' : 'Checker');
+      const stage =
+        top.currentStage ||
+        top.stage ||
+        (top.status === 'Approved' ? 'Accounting' : 'Checker');
       return {
         type: top.type,
         period: top.period,
@@ -609,7 +697,12 @@ export class ProfessorSubmissionsService {
          ORDER BY c.code ASC
       `;
 
-      const result = await this.client.query(query, [profId, profEmail, profDept, employeeId]);
+      const result = await this.client.query(query, [
+        profId,
+        profEmail,
+        profDept,
+        employeeId,
+      ]);
       let rows = result.rows;
 
       if (rows.length === 0) {
@@ -624,10 +717,20 @@ export class ProfessorSubmissionsService {
         rows = fallbackRes.rows;
       }
 
-      return SuccessHandler('Professor courses fetched successfully', 200, rows);
+      return SuccessHandler(
+        'Professor courses fetched successfully',
+        200,
+        rows,
+      );
     } catch (error) {
-      console.error('[ProfessorSubmissionsService] getProfessorCourses error:', error);
-      return ErrorHandler(error instanceof Error ? error.message : 'Failed to fetch courses', 500);
+      console.error(
+        '[ProfessorSubmissionsService] getProfessorCourses error:',
+        error,
+      );
+      return ErrorHandler(
+        error instanceof Error ? error.message : 'Failed to fetch courses',
+        500,
+      );
     }
   }
 }

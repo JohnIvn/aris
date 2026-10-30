@@ -14,7 +14,6 @@ import { LoggerService } from '../logger/logger.service';
 import {
   PayrollConfig,
   DEFAULT_PAYROLL_CONFIG,
-  resolveFacultyRate,
   computePayrollAmount,
 } from './payroll-config.interface';
 
@@ -38,7 +37,7 @@ export class PayrollService {
         const parsed = JSON.parse(res.rows[0].setting_value);
         return { ...DEFAULT_PAYROLL_CONFIG, ...parsed };
       }
-    } catch (err) {
+    } catch {
       // Fall back to default config if not initialized or on query error
     }
     return { ...DEFAULT_PAYROLL_CONFIG };
@@ -77,7 +76,7 @@ export class PayrollService {
       action_type: 'update_payroll_config',
       user_id: user.id,
       role: user.role,
-      metadata: merged as unknown as Record<string, unknown>,
+      metadata: merged,
     });
 
     return merged;
@@ -145,11 +144,14 @@ export class PayrollService {
         const status =
           row.status === 'Approved' || row.status === 'approved'
             ? 'Approved'
-            : row.status === 'Rejected' || row.status === 'rejected' || row.status === 'disapproved'
+            : row.status === 'Rejected' ||
+                row.status === 'rejected' ||
+                row.status === 'disapproved'
               ? 'Rejected'
               : 'Pending';
         const numRate = Number(row.rate) || config.baseHourlyRate;
-        const numAmount = Number(row.amount || row.salary) || (Number(row.hours) * numRate) || 0;
+        const numAmount =
+          Number(row.amount || row.salary) || Number(row.hours) * numRate || 0;
         allRecords.push({
           id: row.id,
           name: row.name,
@@ -212,12 +214,22 @@ export class PayrollService {
         let status: 'Approved' | 'Pending' | 'Rejected' = 'Pending';
         if (ar.payroll_availability || ar.approval_stage === 'AR-AP-STG-4') {
           status = 'Approved';
-        } else if (ar.remarks && /reject|disapprov/i.test(ar.remarks) && !/resubmit/i.test(ar.remarks)) {
+        } else if (
+          ar.remarks &&
+          /reject|disapprov/i.test(ar.remarks) &&
+          !/resubmit/i.test(ar.remarks)
+        ) {
           status = 'Rejected';
         }
 
-        const hours = Number(ar.calculated_hours) || Number(config.defaultCycleHours) || 30;
-        const calc = computePayrollAmount('AR', hours, ar.faculty_position, config);
+        const hours =
+          Number(ar.calculated_hours) || Number(config.defaultCycleHours) || 30;
+        const calc = computePayrollAmount(
+          'AR',
+          hours,
+          ar.faculty_position,
+          config,
+        );
         const rate = calc.rate;
         const amount = calc.netAmount;
         const period =
@@ -290,8 +302,10 @@ export class PayrollService {
       }
 
       // Slice for pagination if requested
-      const safeOffset = typeof offset === 'number' && !isNaN(offset) ? offset : 0;
-      const safeLimit = typeof limit === 'number' && !isNaN(limit) && limit > 0 ? limit : 100;
+      const safeOffset =
+        typeof offset === 'number' && !isNaN(offset) ? offset : 0;
+      const safeLimit =
+        typeof limit === 'number' && !isNaN(limit) && limit > 0 ? limit : 100;
       const paginated = allRecords.slice(safeOffset, safeOffset + safeLimit);
 
       const records = paginated.map((r) => ({

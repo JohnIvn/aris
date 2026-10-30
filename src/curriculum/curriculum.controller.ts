@@ -46,10 +46,7 @@ export class CurriculumController {
   }
 
   @Patch('colleges/:id')
-  updateCollege(
-    @Param('id') id: string,
-    @Body() dto: UpdateCollegeDto,
-  ) {
+  updateCollege(@Param('id') id: string, @Body() dto: UpdateCollegeDto) {
     return this.curriculumService.updateCollege(id, dto);
   }
 
@@ -73,10 +70,7 @@ export class CurriculumController {
   }
 
   @Patch('departments/:id')
-  updateDepartment(
-    @Param('id') id: string,
-    @Body() dto: UpdateDepartmentDto,
-  ) {
+  updateDepartment(@Param('id') id: string, @Body() dto: UpdateDepartmentDto) {
     return this.curriculumService.updateDepartment(id, dto);
   }
 
@@ -92,7 +86,11 @@ export class CurriculumController {
     @Query('department') department?: string,
     @Query('college') college?: string,
   ) {
-    return this.curriculumService.listPrograms(active === 'true', department, college);
+    return this.curriculumService.listPrograms(
+      active === 'true',
+      department,
+      college,
+    );
   }
 
   @Post('programs')
@@ -101,10 +99,7 @@ export class CurriculumController {
   }
 
   @Patch('programs/:id')
-  updateProgram(
-    @Param('id') id: string,
-    @Body() dto: UpdateProgramDto,
-  ) {
+  updateProgram(@Param('id') id: string, @Body() dto: UpdateProgramDto) {
     return this.curriculumService.updateProgram(id, dto);
   }
 
@@ -125,10 +120,7 @@ export class CurriculumController {
   }
 
   @Patch('ranks/:id')
-  updateRank(
-    @Param('id') id: string,
-    @Body() dto: UpdateRankDto,
-  ) {
+  updateRank(@Param('id') id: string, @Body() dto: UpdateRankDto) {
     return this.curriculumService.updateRank(id, dto);
   }
 
@@ -149,10 +141,7 @@ export class CurriculumController {
   }
 
   @Patch('courses/:id')
-  updateCourse(
-    @Param('id') id: string,
-    @Body() dto: UpdateCourseDto,
-  ) {
+  updateCourse(@Param('id') id: string, @Body() dto: UpdateCourseDto) {
     return this.curriculumService.updateCourse(id, dto);
   }
 

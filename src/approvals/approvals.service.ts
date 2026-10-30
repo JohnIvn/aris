@@ -3,7 +3,6 @@ import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { UserSession } from '../lib/data/interfaces';
-import { UpdateApprovalDto } from './dto/approvals.dto';
 import {
   PayrollConfig,
   DEFAULT_PAYROLL_CONFIG,
@@ -121,9 +120,14 @@ export class ApprovalsService {
         `SELECT setting_value FROM system_settings WHERE setting_key = 'payroll_computation_config' LIMIT 1`,
       );
       if (res.rows.length > 0 && res.rows[0].setting_value) {
-        return { ...DEFAULT_PAYROLL_CONFIG, ...JSON.parse(res.rows[0].setting_value) };
+        return {
+          ...DEFAULT_PAYROLL_CONFIG,
+          ...JSON.parse(res.rows[0].setting_value),
+        };
       }
-    } catch {}
+    } catch {
+      // ignore, use default
+    }
     return { ...DEFAULT_PAYROLL_CONFIG };
   }
 
@@ -144,8 +148,10 @@ export class ApprovalsService {
           const lower = pos.trim().toLowerCase();
           if (lower.includes('check')) staffRole = 'Checker';
           else if (lower.includes('sec')) staffRole = 'Secretary';
-          else if (lower.includes('hr') || lower.includes('human')) staffRole = 'HR';
-          else if (lower.includes('account') || lower.includes('payroll')) staffRole = 'Accounting';
+          else if (lower.includes('hr') || lower.includes('human'))
+            staffRole = 'HR';
+          else if (lower.includes('account') || lower.includes('payroll'))
+            staffRole = 'Accounting';
         }
       }
       // 1. Fetch approval stages
@@ -154,9 +160,15 @@ export class ApprovalsService {
           FROM approval_stages
          ORDER BY stage_order ASC
       `);
-      const stagesMap = new Map<string, { label: string; stage_order: number }>();
+      const stagesMap = new Map<
+        string,
+        { label: string; stage_order: number }
+      >();
       stagesRes.rows.forEach((s) => {
-        stagesMap.set(s.stage_key, { label: s.label, stage_order: s.stage_order });
+        stagesMap.set(s.stage_key, {
+          label: s.label,
+          stage_order: s.stage_order,
+        });
       });
 
       // 2. Fetch accomplishment reports joined with faculty data
@@ -262,11 +274,16 @@ export class ApprovalsService {
 
         const tables: ApprovalRecordTable[] = [];
         courseGroups.forEach((groupEntries, key) => {
-          const startDate = groupEntries[0]?.class_date ? formatDate(groupEntries[0].class_date) : '';
+          const startDate = groupEntries[0]?.class_date
+            ? formatDate(groupEntries[0].class_date)
+            : '';
           const endDate = groupEntries[groupEntries.length - 1]?.class_date
             ? formatDate(groupEntries[groupEntries.length - 1].class_date)
             : '';
-          const meta = startDate && endDate ? `${startDate} – ${endDate}` : `${groupEntries.length} sessions`;
+          const meta =
+            startDate && endDate
+              ? `${startDate} – ${endDate}`
+              : `${groupEntries.length} sessions`;
 
           const rows = groupEntries.map((e) => [
             e.code || '—',
@@ -285,8 +302,12 @@ export class ApprovalsService {
           });
         });
 
-        const topics = Array.from(new Set(entries.map((e) => e.topics).filter(Boolean))).join('\n');
-        const tasks = Array.from(new Set(entries.map((e) => e.description).filter(Boolean))).join('\n');
+        const topics = Array.from(
+          new Set(entries.map((e) => e.topics).filter(Boolean)),
+        ).join('\n');
+        const tasks = Array.from(
+          new Set(entries.map((e) => e.description).filter(Boolean)),
+        ).join('\n');
 
         const periodStr = `${formatDate(ar.period_start)} – ${formatDate(ar.period_end)}`;
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
@@ -303,7 +324,9 @@ export class ApprovalsService {
               ar.stage_order === 1 ||
               (ar.submission_event && /resubmit/i.test(ar.submission_event)) ||
               (ar.remarks && /resubmit|correction/i.test(ar.remarks)))) ||
-          Boolean(ar.submission_event && /resubmit/i.test(ar.submission_event)) ||
+          Boolean(
+            ar.submission_event && /resubmit/i.test(ar.submission_event),
+          ) ||
           Boolean(ar.remarks && /resubmit/i.test(ar.remarks));
 
         // Status mapping
@@ -313,11 +336,18 @@ export class ApprovalsService {
         if (isResubmitted) {
           status = 'Pending';
           action = 'AR resubmitted with corrections · Pending review';
-        } else if (ar.remarks && /reject|disapprov/i.test(ar.remarks) && !/resubmit/i.test(ar.remarks)) {
+        } else if (
+          ar.remarks &&
+          /reject|disapprov/i.test(ar.remarks) &&
+          !/resubmit/i.test(ar.remarks)
+        ) {
           status = 'Disapproved';
           action = 'AR returned for correction';
         } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {
-          status = ar.payroll_availability || ar.payroll_received ? 'Approved' : 'Pending';
+          status =
+            ar.payroll_availability || ar.payroll_received
+              ? 'Approved'
+              : 'Pending';
           action = ar.payroll_received
             ? 'AR approved · Payroll received'
             : ar.payroll_availability
@@ -361,17 +391,24 @@ export class ApprovalsService {
             facultyNumber: ar.faculty_no || '—',
             college: ar.department,
             tables,
-            topics: topics || 'Curriculum delivery, student mentorship, and laboratory activities.',
-            tasks: tasks || 'Conducted scheduled lectures, prepared modules, and submitted grade records.',
+            topics:
+              topics ||
+              'Curriculum delivery, student mentorship, and laboratory activities.',
+            tasks:
+              tasks ||
+              'Conducted scheduled lectures, prepared modules, and submitted grade records.',
             notes: isResubmitted
-              ? (ar.remarks && !/disapprov|reject|returned to the faculty/i.test(ar.remarks) ? ar.remarks : 'Resubmitted with corrections. Pending review.')
-              : (ar.remarks || undefined),
+              ? ar.remarks &&
+                !/disapprov|reject|returned to the faculty/i.test(ar.remarks)
+                ? ar.remarks
+                : 'Resubmitted with corrections. Pending review.'
+              : ar.remarks || undefined,
             attachment: `${ar.faculty_name.replace(/[^a-zA-Z]/g, '')}_AR_${periodStr.replace(/\s+/g, '_')}.pdf · 1.2 MB`,
             reviewer,
             reviewedAt,
             remark: isResubmitted
               ? 'Resubmitted with corrections. Pending review.'
-              : (ar.remarks || `Current Stage: ${stage}. Awaiting verification.`),
+              : ar.remarks || `Current Stage: ${stage}. Awaiting verification.`,
           },
         });
       }
@@ -389,18 +426,22 @@ export class ApprovalsService {
         if (!logs.length) return;
         const first = logs[0];
         const daysLogged = logs.length;
-        const totalHours = logs.reduce((acc, r) => acc + (Number(r.total_hours) || 0), 0).toFixed(1);
+        const totalHours = logs
+          .reduce((acc, r) => acc + (Number(r.total_hours) || 0), 0)
+          .toFixed(1);
 
         const startDate = formatDate(logs[logs.length - 1]?.shift_date);
         const endDate = formatDate(logs[0]?.shift_date);
         const periodStr = `${startDate} – ${endDate}`;
 
-        const rows = logs.slice(0, 15).map((l) => [
-          formatDate(l.shift_date),
-          formatTime(l.time_in ? `1970-01-01T${l.time_in}` : null),
-          formatTime(l.time_out ? `1970-01-01T${l.time_out}` : null),
-          Number(l.total_hours) || 0,
-        ]);
+        const rows = logs
+          .slice(0, 15)
+          .map((l) => [
+            formatDate(l.shift_date),
+            formatTime(l.time_in ? `1970-01-01T${l.time_in}` : null),
+            formatTime(l.time_out ? `1970-01-01T${l.time_out}` : null),
+            Number(l.total_hours) || 0,
+          ]);
 
         const tables: ApprovalRecordTable[] = [
           {
@@ -429,7 +470,9 @@ export class ApprovalsService {
         }
 
         const reviewer =
-          stage === 'Accounting' ? 'Ana Bautista (HR)' : 'HR Attendance Verification';
+          stage === 'Accounting'
+            ? 'Ana Bautista (HR)'
+            : 'HR Attendance Verification';
         const submitted = `${endDate} · ${formatTime(first.created_at || new Date())}`;
 
         items.push({
@@ -462,7 +505,9 @@ export class ApprovalsService {
         });
       });
 
-      const scopedItems = staffRole ? items.filter((it) => it.stage === staffRole) : items;
+      const scopedItems = staffRole
+        ? items.filter((it) => it.stage === staffRole)
+        : items;
       return SuccessHandler('Approvals fetched successfully', 200, scopedItems);
     } catch (error) {
       if (error instanceof Error) {
@@ -476,7 +521,9 @@ export class ApprovalsService {
     try {
       // Support array of items (like whole queue save from client) or single decision
       if (Array.isArray(payload)) {
-        return SuccessHandler('Queue updated successfully', 200, { updated: payload.length });
+        return SuccessHandler('Queue updated successfully', 200, {
+          updated: payload.length,
+        });
       }
 
       const { id, action, remark, stage, role } = payload;
@@ -485,7 +532,10 @@ export class ApprovalsService {
       }
 
       // Check if it's an Accomplishment Report (UUID)
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      const isUUID =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          id,
+        );
 
       if (isUUID) {
         const arCheck = await this.client.query(
@@ -598,9 +648,13 @@ export class ApprovalsService {
               let h = Number(entry.shift_hours);
               if (isNaN(h) || h <= 0) {
                 if (entry.shift_start && entry.shift_end) {
-                  const [sh, sm] = String(entry.shift_start).split(':').map(Number);
-                  const [eh, em] = String(entry.shift_end).split(':').map(Number);
-                  const diff = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+                  const [sh, sm] = String(entry.shift_start)
+                    .split(':')
+                    .map(Number);
+                  const [eh, em] = String(entry.shift_end)
+                    .split(':')
+                    .map(Number);
+                  const diff = eh * 60 + (em || 0) - (sh * 60 + (sm || 0));
                   h = diff > 0 ? diff / 60 : 3;
                 } else if (entry.units && Number(entry.units) > 0) {
                   h = Number(entry.units);
@@ -616,7 +670,12 @@ export class ApprovalsService {
             }
 
             // Dynamic calculation using configured rates and faculty rank
-            const calc = computePayrollAmount('AR', totalHours, arInfo.faculty_position, payrollConfig);
+            const calc = computePayrollAmount(
+              'AR',
+              totalHours,
+              arInfo.faculty_position,
+              payrollConfig,
+            );
             const hourlyRate = calc.rate;
             const calculatedSalary = calc.netAmount;
 
@@ -725,7 +784,8 @@ export class ApprovalsService {
         } else {
           // Disapprove
           const remarkText =
-            remark || `Disapproved at ${role || currentStageRole} stage. Returned to faculty for correction.`;
+            remark ||
+            `Disapproved at ${role || currentStageRole} stage. Returned to faculty for correction.`;
 
           await this.client.query(
             `UPDATE accomplishment_reports
@@ -745,7 +805,11 @@ export class ApprovalsService {
                     event = $2,
                     updated_at = NOW()
               WHERE report_id = $3`,
-            [remarkText, `AR returned for correction by ${role || currentStageRole}`, id],
+            [
+              remarkText,
+              `AR returned for correction by ${role || currentStageRole}`,
+              id,
+            ],
           );
 
           await this.client.query(
@@ -805,7 +869,12 @@ export class ApprovalsService {
         }
 
         const payrollConfig = await this.getPayrollConfig();
-        const calc = computePayrollAmount('DTR', totalHours, null, payrollConfig);
+        const calc = computePayrollAmount(
+          'DTR',
+          totalHours,
+          null,
+          payrollConfig,
+        );
         const dtrRate = calc.rate;
         const calculatedSalary = calc.netAmount;
 
@@ -931,4 +1000,3 @@ export class ApprovalsService {
     }
   }
 }
-

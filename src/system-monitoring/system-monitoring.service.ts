@@ -79,7 +79,8 @@ export class SystemMonitoringService {
       const dbLatency = Math.max(1, Date.now() - t0);
       const isHealthy = dbLatency < 250;
       const status = isHealthy ? 'Healthy' : 'Degraded';
-      const versionStr = dbVersionRes.rows[0]?.version?.split(' ')[1] || 'v16.x';
+      const versionStr =
+        dbVersionRes.rows[0]?.version?.split(' ')[1] || 'v16.x';
 
       services.push({
         name: 'PostgreSQL Database',
@@ -235,8 +236,12 @@ export class SystemMonitoringService {
       ]);
 
       const downCount = services.filter((s) => s.status === 'Down').length;
-      const degradedCount = services.filter((s) => s.status === 'Degraded').length;
-      const healthyCount = services.filter((s) => s.status === 'Healthy').length;
+      const degradedCount = services.filter(
+        (s) => s.status === 'Degraded',
+      ).length;
+      const healthyCount = services.filter(
+        (s) => s.status === 'Healthy',
+      ).length;
 
       const totalReq = topEndpoints.reduce((sum, e) => sum + e.reqSec, 0);
       const avgError =

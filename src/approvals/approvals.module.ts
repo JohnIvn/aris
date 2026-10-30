@@ -11,4 +11,3 @@ import { ApprovalsService } from './approvals.service';
   exports: [ApprovalsService],
 })
 export class ApprovalsModule {}
-

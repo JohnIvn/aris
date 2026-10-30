@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ProfessorSubmissionsService } from './professor-submissions.service';
 import { CurrentUser } from '../lib/decorators/cookie-decorator';
 import type { UserSession } from '../lib/data/interfaces';
@@ -48,10 +42,7 @@ export class ProfessorSubmissionsController {
   }
 
   @Post('submissions')
-  createSubmission(
-    @Body() data: any,
-    @CurrentUser() user?: UserSession,
-  ) {
+  createSubmission(@Body() data: any, @CurrentUser() user?: UserSession) {
     return this.submissionsService.createAccomplishmentReport(user, data);
   }
 

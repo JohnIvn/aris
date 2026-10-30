@@ -87,7 +87,9 @@ export class AnnouncementsService {
       );
     } catch (error) {
       return ErrorHandler(
-        error instanceof Error ? error.message : 'Failed to fetch announcements',
+        error instanceof Error
+          ? error.message
+          : 'Failed to fetch announcements',
         500,
       );
     }
@@ -153,7 +155,9 @@ export class AnnouncementsService {
       );
     } catch (error) {
       return ErrorHandler(
-        error instanceof Error ? error.message : 'Failed to publish announcement',
+        error instanceof Error
+          ? error.message
+          : 'Failed to publish announcement',
         500,
       );
     }
@@ -179,8 +183,7 @@ export class AnnouncementsService {
         data.audience !== undefined ? data.audience : current.audience;
       const isPinned =
         data.isPinned !== undefined ? data.isPinned : current.is_pinned;
-      const status =
-        data.status !== undefined ? data.status : current.status;
+      const status = data.status !== undefined ? data.status : current.status;
       const expiresAt =
         data.expiresAt !== undefined ? data.expiresAt : current.expires_at;
 
@@ -229,7 +232,9 @@ export class AnnouncementsService {
       );
     } catch (error) {
       return ErrorHandler(
-        error instanceof Error ? error.message : 'Failed to update announcement',
+        error instanceof Error
+          ? error.message
+          : 'Failed to update announcement',
         500,
       );
     }
@@ -280,7 +285,9 @@ export class AnnouncementsService {
       return SuccessHandler('Announcement deleted successfully', 200, { id });
     } catch (error) {
       return ErrorHandler(
-        error instanceof Error ? error.message : 'Failed to delete announcement',
+        error instanceof Error
+          ? error.message
+          : 'Failed to delete announcement',
         500,
       );
     }

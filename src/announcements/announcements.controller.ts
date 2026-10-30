@@ -50,19 +50,13 @@ export class AnnouncementsController {
 
   @Patch(':id')
   @Roles('admin')
-  update(
-    @Param('id') id: string,
-    @Body() data: UpdateAnnouncementDto,
-  ) {
+  update(@Param('id') id: string, @Body() data: UpdateAnnouncementDto) {
     return this.announcementsService.updateAnnouncement(id, data);
   }
 
   @Patch(':id/pin')
   @Roles('admin')
-  togglePin(
-    @Param('id') id: string,
-    @Body() data: TogglePinAnnouncementDto,
-  ) {
+  togglePin(@Param('id') id: string, @Body() data: TogglePinAnnouncementDto) {
     return this.announcementsService.togglePin(id, data?.isPinned);
   }
 

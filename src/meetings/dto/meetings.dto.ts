@@ -92,4 +92,3 @@ export class SaveMeetingDto {
   @IsOptional()
   metadata?: Record<string, unknown>;
 }
-

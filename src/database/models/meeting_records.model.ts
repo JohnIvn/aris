@@ -2,7 +2,9 @@ import { Pool } from 'pg';
 
 export async function createMeetingRecords(client: Pool) {
   try {
-    await client.query(`ALTER TYPE meeting_status ADD VALUE IF NOT EXISTS 'completed';`);
+    await client.query(
+      `ALTER TYPE meeting_status ADD VALUE IF NOT EXISTS 'completed';`,
+    );
   } catch {
     // Enum value may already exist or cannot run in current context
   }

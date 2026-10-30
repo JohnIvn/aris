@@ -35,12 +35,18 @@ export class UserSettingsService {
 
   private getSupabase(): SupabaseClient {
     const url = process.env.SUPABASE_URL ?? process.env.DATABASE_REST_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.DATABASE_SERVICE_ROLE_KEY;
+    const key =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ??
+      process.env.DATABASE_SERVICE_ROLE_KEY;
     if (!url || !key) {
-      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured');
+      throw new Error(
+        'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured',
+      );
     }
 
-    return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+    return createClient(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
   }
 
   private async getBucketName(supabase: SupabaseClient): Promise<string> {
@@ -53,7 +59,9 @@ export class UserSettingsService {
     try {
       const { data: buckets } = await supabase.storage.listBuckets();
       if (buckets && buckets.length > 0) {
-        const found = buckets.find((b) => b.name === 'photos' || b.name === 'avatars');
+        const found = buckets.find(
+          (b) => b.name === 'photos' || b.name === 'avatars',
+        );
         if (found) return found.name;
       }
     } catch {
@@ -98,7 +106,8 @@ export class UserSettingsService {
       const middlename = this.text(data.middlename ?? data.middleName) || null;
       const lastname = this.text(data.lastname ?? data.lastName);
       const email = this.text(data.email).toLowerCase();
-      const rawUsername = data.username !== undefined ? this.text(data.username) : undefined;
+      const rawUsername =
+        data.username !== undefined ? this.text(data.username) : undefined;
       const phone = this.text(data.phone) || null;
       const address = this.text(data.address) || null;
       const department = this.text(data.department) || null;
@@ -108,13 +117,21 @@ export class UserSettingsService {
         return this.invalid('First name, last name, and email are required');
       }
 
-      const existingEmail = await findDuplicateEmailAcrossRoles(this.db, email, user.id);
+      const existingEmail = await findDuplicateEmailAcrossRoles(
+        this.db,
+        email,
+        user.id,
+      );
       if (existingEmail) {
         return ErrorHandler('Email already in use', 409);
       }
 
       if (rawUsername) {
-        const existingUsername = await findDuplicateUsernameAcrossRoles(this.db, rawUsername, user.id);
+        const existingUsername = await findDuplicateUsernameAcrossRoles(
+          this.db,
+          rawUsername,
+          user.id,
+        );
         if (existingUsername) {
           return ErrorHandler('Username already in use', 409);
         }
@@ -122,7 +139,15 @@ export class UserSettingsService {
 
       let usernameClause = '';
       let passwordClause = '';
-      const params: any[] = [firstname, middlename, lastname, email, phone, address, department];
+      const params: any[] = [
+        firstname,
+        middlename,
+        lastname,
+        email,
+        phone,
+        address,
+        department,
+      ];
 
       if (rawUsername) {
         params.push(rawUsername);
@@ -153,7 +178,11 @@ export class UserSettingsService {
         params,
       );
       if (!result.rows[0]) return this.invalid('User profile not found', 404);
-      return SuccessHandler('Profile updated successfully', 200, result.rows[0]);
+      return SuccessHandler(
+        'Profile updated successfully',
+        200,
+        result.rows[0],
+      );
     } catch (error) {
       return this.error(error);
     }
@@ -163,8 +192,10 @@ export class UserSettingsService {
     try {
       const password = this.text(data.password);
       const confirmation = this.text(data.confirmPassword);
-      if (!password || password.length < 8) return this.invalid('Password must be at least 8 characters');
-      if (password !== confirmation) return this.invalid('Passwords do not match');
+      if (!password || password.length < 8)
+        return this.invalid('Password must be at least 8 characters');
+      if (password !== confirmation)
+        return this.invalid('Passwords do not match');
       const result = await this.db.query<{ password_hash: string | null }>(
         `SELECT password_hash FROM ${this.table(user)} WHERE id = $1`,
         [user.id],
@@ -201,7 +232,11 @@ export class UserSettingsService {
        RETURNING desktop, weekly, mentions`,
       [user.id, data.desktop, data.weekly, data.mentions],
     );
-    return SuccessHandler('Preferences updated successfully', 200, result.rows[0]);
+    return SuccessHandler(
+      'Preferences updated successfully',
+      200,
+      result.rows[0],
+    );
   }
 
   async savePhoto(user: UserSession, file: MultipartFile) {
@@ -215,7 +250,10 @@ export class UserSettingsService {
         `SELECT setting_value FROM system_settings
          WHERE setting_key = 'maxUploadMb' LIMIT 1`,
       );
-      const maxUploadMb = Math.min(6, Math.max(1, Number(limitResult.rows[0]?.setting_value ?? 6)));
+      const maxUploadMb = Math.min(
+        6,
+        Math.max(1, Number(limitResult.rows[0]?.setting_value ?? 6)),
+      );
       if (content.length > maxUploadMb * 1024 * 1024) {
         return this.invalid(`Photo must be ${maxUploadMb} MB or smaller`);
       }
@@ -224,7 +262,10 @@ export class UserSettingsService {
       const bucket = await this.getBucketName(supabase);
       await this.ensureBucket(supabase, bucket);
 
-      const extension = file.mimetype.split('/')[1] === 'jpeg' ? 'jpg' : file.mimetype.split('/')[1];
+      const extension =
+        file.mimetype.split('/')[1] === 'jpeg'
+          ? 'jpg'
+          : file.mimetype.split('/')[1];
       const filename = `${user.id}.${extension}`;
 
       // Clean up previous files with different extensions for this user
@@ -246,11 +287,15 @@ export class UserSettingsService {
         });
 
       if (uploadError) {
-        this.logger.error(`Failed to upload photo to Supabase storage: ${uploadError.message}`);
+        this.logger.error(
+          `Failed to upload photo to Supabase storage: ${uploadError.message}`,
+        );
         return this.invalid(`Photo upload failed: ${uploadError.message}`, 500);
       }
 
-      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filename);
+      const { data: publicUrlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(filename);
       const photoUrl = `${publicUrlData.publicUrl}?rev=${Date.now()}`;
 
       await this.db.query(
@@ -258,7 +303,9 @@ export class UserSettingsService {
         [photoUrl, user.id],
       );
 
-      return SuccessHandler('Photo updated successfully', 200, { avatar_url: photoUrl });
+      return SuccessHandler('Photo updated successfully', 200, {
+        avatar_url: photoUrl,
+      });
     } catch (error) {
       return this.error(error);
     }
@@ -280,7 +327,12 @@ export class UserSettingsService {
 
       // If an existing local file exists on disk (backwards compatibility), serve it
       const extension = url.split('?')[0].split('.').pop();
-      const localPath = join(process.cwd(), 'uploads', 'photos', `${user.id}.${extension}`);
+      const localPath = join(
+        process.cwd(),
+        'uploads',
+        'photos',
+        `${user.id}.${extension}`,
+      );
       if (existsSync(localPath)) {
         const content = await readFile(localPath);
         return reply.type(`image/${extension}`).send(content);
@@ -295,8 +347,11 @@ export class UserSettingsService {
       const file = files?.find((f) => f.name.startsWith(user.id));
       if (!file) return reply.code(404).send({ message: 'Photo not found' });
 
-      const { data, error } = await supabase.storage.from(bucket).download(file.name);
-      if (error || !data) return reply.code(404).send({ message: 'Photo not found' });
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .download(file.name);
+      if (error || !data)
+        return reply.code(404).send({ message: 'Photo not found' });
 
       const buffer = Buffer.from(await data.arrayBuffer());
       return reply.type(data.type || `image/${extension}`).send(buffer);
@@ -316,6 +371,9 @@ export class UserSettingsService {
   }
 
   private error(error: unknown) {
-    return this.invalid(error instanceof Error ? error.message : 'Server Error', 500);
+    return this.invalid(
+      error instanceof Error ? error.message : 'Server Error',
+      500,
+    );
   }
 }

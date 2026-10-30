@@ -32,4 +32,3 @@ export class EnrollBiometricDto {
   @IsOptional()
   device_name?: string;
 }
-

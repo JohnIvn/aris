@@ -63,19 +63,30 @@ export class SystemSettingsService {
       const allowed = Object.keys(this.defaults) as (keyof Settings)[];
       for (const key of allowed) {
         if (data[key] === undefined) continue;
-        if (typeof this.defaults[key] === 'boolean' && typeof data[key] !== 'boolean') {
+        if (
+          typeof this.defaults[key] === 'boolean' &&
+          typeof data[key] !== 'boolean'
+        ) {
           return this.errorResponse(`${key} must be a boolean`);
         }
-        if (typeof this.defaults[key] === 'number' && (typeof data[key] !== 'number' || !Number.isFinite(data[key] as number))) {
+        if (
+          typeof this.defaults[key] === 'number' &&
+          (typeof data[key] !== 'number' || !Number.isFinite(data[key]))
+        ) {
           return this.errorResponse(`${key} must be a number`);
         }
-        if (typeof this.defaults[key] === 'string' && typeof data[key] !== 'string') {
+        if (
+          typeof this.defaults[key] === 'string' &&
+          typeof data[key] !== 'string'
+        ) {
           return this.errorResponse(`${key} must be a string`);
         }
         next[key] = data[key] as never;
       }
       if (next.sessionTimeoutMinutes < 5 || next.sessionTimeoutMinutes > 1440) {
-        return this.errorResponse('Session timeout must be between 5 and 1440 minutes');
+        return this.errorResponse(
+          'Session timeout must be between 5 and 1440 minutes',
+        );
       }
       if (next.maxUploadMb < 1 || next.maxUploadMb > 6) {
         return this.errorResponse('Upload limit must be between 1 and 6 MB');
@@ -91,7 +102,14 @@ export class SystemSettingsService {
                  category = EXCLUDED.category,
                  updated_by = EXCLUDED.updated_by,
                  updated_at = NOW()`,
-          [key, String(next[key]), typeof next[key], 'system', `System setting: ${key}`, user.id],
+          [
+            key,
+            String(next[key]),
+            typeof next[key],
+            'system',
+            `System setting: ${key}`,
+            user.id,
+          ],
         );
       }
       return SuccessHandler('System settings saved successfully', 200, next);
@@ -105,6 +123,9 @@ export class SystemSettingsService {
   }
 
   private error(error: unknown) {
-    return ErrorHandler(error instanceof Error ? error.message : 'Server Error', 500);
+    return ErrorHandler(
+      error instanceof Error ? error.message : 'Server Error',
+      500,
+    );
   }
 }

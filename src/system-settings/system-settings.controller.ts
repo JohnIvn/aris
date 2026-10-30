@@ -17,7 +17,10 @@ export class SystemSettingsController {
   }
 
   @Put()
-  update(@CurrentUser() user: UserSession, @Body() data: Record<string, unknown>) {
+  update(
+    @CurrentUser() user: UserSession,
+    @Body() data: Record<string, unknown>,
+  ) {
     return this.service.update(user, data);
   }
 }

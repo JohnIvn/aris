@@ -43,7 +43,11 @@ export class StaffService {
          WHERE is_active = TRUE
          ORDER BY id ASC
       `);
-      return SuccessHandler('Successfully Fetched Staff Roles', 200, result.rows);
+      return SuccessHandler(
+        'Successfully Fetched Staff Roles',
+        200,
+        result.rows,
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500, error.name)
@@ -59,15 +63,20 @@ export class StaffService {
       let avatarUrl: string | null = null;
       let passwordHash: string | null = null;
       if (data.provider === 'google') {
-        if (!data.oauth_id_token) throw new Error('A verified Google account is required.');
-        const profile = await this.oauthService.verifyGoogleToken(data.oauth_id_token);
-        if (!profile) throw new Error('The Google account could not be verified.');
+        if (!data.oauth_id_token)
+          throw new Error('A verified Google account is required.');
+        const profile = await this.oauthService.verifyGoogleToken(
+          data.oauth_id_token,
+        );
+        if (!profile)
+          throw new Error('The Google account could not be verified.');
         email = profile.email.trim().toLowerCase();
         firstname = profile.firstname;
         lastname = profile.lastname;
         avatarUrl = profile.avatar_url;
       } else {
-        if (!data.password) throw new Error('Password is required for a local account.');
+        if (!data.password)
+          throw new Error('Password is required for a local account.');
         passwordHash = await argon2.hash(data.password);
       }
 
@@ -127,24 +136,51 @@ export class StaffService {
 
   async updateStaff(id: string, data: UpdateStaffDto) {
     try {
-      const existing = await this.databaseService.getClient().query(
-        `SELECT * FROM user_staffs WHERE id = $1`,
-        [id],
-      );
-      if (existing.rowCount === 0) return ErrorHandler('Staff member not found', 404);
+      const existing = await this.databaseService
+        .getClient()
+        .query(`SELECT * FROM user_staffs WHERE id = $1`, [id]);
+      if (existing.rowCount === 0)
+        return ErrorHandler('Staff member not found', 404);
       const current = existing.rows[0];
 
-      const employeeId = data.employee_id !== undefined ? data.employee_id.trim() : current.employee_id;
-      const firstname = data.firstname !== undefined ? data.firstname.trim() : current.firstname;
-      const middlename = data.middlename !== undefined ? (data.middlename?.trim() || null) : current.middlename;
-      const lastname = data.lastname !== undefined ? data.lastname.trim() : current.lastname;
-      const email = data.email !== undefined ? data.email.trim().toLowerCase() : current.email;
-      const username = data.username !== undefined ? data.username.trim() : current.username;
-      const position = data.position !== undefined ? (data.position?.trim() || null) : current.position;
-      const department = data.department !== undefined ? (data.department?.trim() || null) : current.department;
-      const isBanned = data.active !== undefined ? !data.active : current.is_banned;
-      const phone = data.phone !== undefined ? (data.phone?.trim() || null) : (current.phone || null);
-      const address = data.address !== undefined ? (data.address?.trim() || null) : (current.address || null);
+      const employeeId =
+        data.employee_id !== undefined
+          ? data.employee_id.trim()
+          : current.employee_id;
+      const firstname =
+        data.firstname !== undefined
+          ? data.firstname.trim()
+          : current.firstname;
+      const middlename =
+        data.middlename !== undefined
+          ? data.middlename?.trim() || null
+          : current.middlename;
+      const lastname =
+        data.lastname !== undefined ? data.lastname.trim() : current.lastname;
+      const email =
+        data.email !== undefined
+          ? data.email.trim().toLowerCase()
+          : current.email;
+      const username =
+        data.username !== undefined ? data.username.trim() : current.username;
+      const position =
+        data.position !== undefined
+          ? data.position?.trim() || null
+          : current.position;
+      const department =
+        data.department !== undefined
+          ? data.department?.trim() || null
+          : current.department;
+      const isBanned =
+        data.active !== undefined ? !data.active : current.is_banned;
+      const phone =
+        data.phone !== undefined
+          ? data.phone?.trim() || null
+          : current.phone || null;
+      const address =
+        data.address !== undefined
+          ? data.address?.trim() || null
+          : current.address || null;
 
       if (data.email !== undefined) {
         const existingEmail = await findDuplicateEmailAcrossRoles(
@@ -215,7 +251,11 @@ export class StaffService {
         event: 'Modified Staff Member',
         detail: `Updated details${data.password ? ' and password' : ''} for ${firstname} ${lastname} (${email})`,
       });
-      return SuccessHandler('Successfully Updated Staff Member', 200, result.rows[0]);
+      return SuccessHandler(
+        'Successfully Updated Staff Member',
+        200,
+        result.rows[0],
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 400, error.name)
@@ -239,7 +279,11 @@ export class StaffService {
         event: active ? 'Activated Staff' : 'Deactivated Staff',
         detail: `${active ? 'Restored access for' : 'Deactivated/banned access for'} staff ID ${id}`,
       });
-      return SuccessHandler('Successfully Updated Staff Status', 200, result.rows[0]);
+      return SuccessHandler(
+        'Successfully Updated Staff Status',
+        200,
+        result.rows[0],
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500, error.name)
@@ -249,10 +293,9 @@ export class StaffService {
 
   async deleteStaff(id: string) {
     try {
-      const result = await this.databaseService.getClient().query(
-        `DELETE FROM user_staffs WHERE id = $1 RETURNING id`,
-        [id],
-      );
+      const result = await this.databaseService
+        .getClient()
+        .query(`DELETE FROM user_staffs WHERE id = $1 RETURNING id`, [id]);
       if (!result.rowCount) return ErrorHandler('Staff member not found', 404);
       void this.loggerService.logSystemEvent({
         actor_label: 'Administrator',
@@ -260,7 +303,11 @@ export class StaffService {
         event: 'Deleted Staff Member',
         detail: `Permanently deleted staff record (${id})`,
       });
-      return SuccessHandler('Successfully Deleted Staff Member', 200, result.rows[0]);
+      return SuccessHandler(
+        'Successfully Deleted Staff Member',
+        200,
+        result.rows[0],
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500, error.name)

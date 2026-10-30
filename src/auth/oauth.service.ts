@@ -82,9 +82,7 @@ export class OAuthService {
    * Verifies the Google ID token against the client ID for the calling
    * platform. Returns null if the token is invalid or the email is unverified.
    */
-  async verifyGoogleToken(
-    idToken: string,
-  ): Promise<GoogleProfile | null> {
+  async verifyGoogleToken(idToken: string): Promise<GoogleProfile | null> {
     const audience = process.env.WEB_GOOGLE_CLIENT_ID;
 
     if (!audience) {
@@ -242,7 +240,9 @@ export class OAuthService {
         age,
       };
 
-      const normalizedEmail = profile.email ? profile.email.trim().toLowerCase() : '';
+      const normalizedEmail = profile.email
+        ? profile.email.trim().toLowerCase()
+        : '';
       const normalizedUsername = (username || '').trim();
 
       const emailExists = normalizedEmail

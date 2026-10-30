@@ -23,15 +23,24 @@ export class HttpMetricsInterceptor implements NestInterceptor {
           const res = http.getResponse();
           const duration = Math.max(1, Date.now() - startTime);
           const statusCode = res?.statusCode || 200;
-          this.metrics.record(req.method || 'GET', req.url || '/', statusCode, duration);
+          this.metrics.record(
+            req.method || 'GET',
+            req.url || '/',
+            statusCode,
+            duration,
+          );
         },
         error: (err) => {
           const duration = Math.max(1, Date.now() - startTime);
           const statusCode = err?.status || err?.statusCode || 500;
-          this.metrics.record(req.method || 'GET', req.url || '/', statusCode, duration);
+          this.metrics.record(
+            req.method || 'GET',
+            req.url || '/',
+            statusCode,
+            duration,
+          );
         },
       }),
     );
   }
 }
-

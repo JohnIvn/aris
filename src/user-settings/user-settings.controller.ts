@@ -25,12 +25,18 @@ export class UserSettingsController {
   }
 
   @Patch('profile')
-  updateProfile(@CurrentUser() user: UserSession, @Body() data: Record<string, unknown>) {
+  updateProfile(
+    @CurrentUser() user: UserSession,
+    @Body() data: Record<string, unknown>,
+  ) {
     return this.service.updateProfile(user, data);
   }
 
   @Post('password')
-  changePassword(@CurrentUser() user: UserSession, @Body() data: Record<string, unknown>) {
+  changePassword(
+    @CurrentUser() user: UserSession,
+    @Body() data: Record<string, unknown>,
+  ) {
     return this.service.changePassword(user, data);
   }
 
@@ -40,7 +46,10 @@ export class UserSettingsController {
   }
 
   @Patch('preferences')
-  updatePreferences(@CurrentUser() user: UserSession, @Body() data: Record<string, unknown>) {
+  updatePreferences(
+    @CurrentUser() user: UserSession,
+    @Body() data: Record<string, unknown>,
+  ) {
     return this.service.updatePreferences(user, data);
   }
 
@@ -55,10 +64,7 @@ export class UserSettingsController {
   }
 
   @Get('photo')
-  async photo(
-    @CurrentUser() user: UserSession,
-    @Res() reply: FastifyReply,
-  ) {
+  async photo(@CurrentUser() user: UserSession, @Res() reply: FastifyReply) {
     return this.service.sendPhoto(user, reply);
   }
 }

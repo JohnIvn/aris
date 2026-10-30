@@ -108,7 +108,10 @@ export class AuthService {
           auth_action: 'signin',
           role: undefined,
           user_id: undefined,
-          metadata: { email: (user && user.email) || 'Unknown', reason: 'Account does not exist' },
+          metadata: {
+            email: (user && user.email) || 'Unknown',
+            reason: 'Account does not exist',
+          },
         });
         return ErrorHandler('User Not Found', 404, userData);
       }
@@ -124,7 +127,10 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      const fullName = [userData.firstname, userData.lastname].filter(Boolean).join(' ') || userData.username || userData.email;
+      const fullName =
+        [userData.firstname, userData.lastname].filter(Boolean).join(' ') ||
+        userData.username ||
+        userData.email;
       this.recordAuthLog({
         action_status: 'success',
         auth_action: 'signin',
@@ -201,15 +207,22 @@ export class AuthService {
       const verifyPassword = await argon2.verify(user.password_hash, password);
 
       if (!verifyPassword) {
-        const failName = [user.firstname, user.lastname].filter(Boolean).join(' ') || user.username || user.email;
+        const failName =
+          [user.firstname, user.lastname].filter(Boolean).join(' ') ||
+          user.username ||
+          user.email;
         this.recordAuthLog({
           action_status: 'failure',
           auth_action: 'signin',
           role: user.role,
-      position: user.position,
-      department: user.department,
+          position: user.position,
+          department: user.department,
           user_id: user.id,
-          metadata: { name: failName, email: user.email, reason: 'Incorrect password' },
+          metadata: {
+            name: failName,
+            email: user.email,
+            reason: 'Incorrect password',
+          },
         });
         return ErrorHandler('Incorrect Password', 406, []);
       }
@@ -225,13 +238,16 @@ export class AuthService {
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      const successName = [user.firstname, user.lastname].filter(Boolean).join(' ') || user.username || user.email;
+      const successName =
+        [user.firstname, user.lastname].filter(Boolean).join(' ') ||
+        user.username ||
+        user.email;
       this.recordAuthLog({
         action_status: 'success',
         auth_action: 'signin',
         role: user.role,
-      position: user.position,
-      department: user.department,
+        position: user.position,
+        department: user.department,
         user_id: user.id,
         metadata: { name: successName, email: user.email },
       });
@@ -403,8 +419,8 @@ export class AuthService {
         action_status: 'success',
         auth_action: 'signup',
         role: user.role,
-      position: user.position,
-      department: user.department,
+        position: user.position,
+        department: user.department,
         user_id: user.id,
         metadata: {
           email: email,
@@ -440,8 +456,8 @@ export class AuthService {
         action_status: 'success',
         auth_action: 'signout',
         role: user.role,
-      position: user.position,
-      department: user.department,
+        position: user.position,
+        department: user.department,
         user_id: user.id,
         metadata: { name: user.email, email: user.email, token: token ?? null },
       });

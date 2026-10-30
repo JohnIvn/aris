@@ -32,10 +32,7 @@ export class ProfessorsController {
   }
 
   @Patch(':id')
-  updateProfessor(
-    @Param('id') id: string,
-    @Body() data: UpdateProfessorDto,
-  ) {
+  updateProfessor(@Param('id') id: string, @Body() data: UpdateProfessorDto) {
     return this.professorsService.updateProfessor(id, data);
   }
 

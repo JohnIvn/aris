@@ -21,4 +21,3 @@ export class UpdateApprovalDto {
   @IsString()
   role?: string;
 }
-

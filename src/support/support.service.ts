@@ -33,10 +33,7 @@ export class SupportService {
   async listTickets(user: UserSession) {
     const client = this.databaseService.getClient();
     const params: string[] = [];
-    const visibility =
-      user.role === 'admin'
-        ? ''
-        : 'WHERE t.opened_by = $1';
+    const visibility = user.role === 'admin' ? '' : 'WHERE t.opened_by = $1';
     if (user.role !== 'admin') params.push(user.id);
 
     const result = await client.query<TicketRow>(
@@ -86,7 +83,12 @@ export class SupportService {
             ) u WHERE u.id = opened_by
           ), 'Unknown user') AS requester
       `,
-      [user.id, dto.subject.trim(), dto.description.trim(), dto.priority ?? null],
+      [
+        user.id,
+        dto.subject.trim(),
+        dto.description.trim(),
+        dto.priority ?? null,
+      ],
     );
     return this.toTicket(result.rows[0]);
   }
@@ -97,7 +99,9 @@ export class SupportService {
     dto: UpdateSupportTicketDto,
   ) {
     if (user.role !== 'admin') {
-      throw new ForbiddenException('Only administrators can update ticket status.');
+      throw new ForbiddenException(
+        'Only administrators can update ticket status.',
+      );
     }
 
     const result = await this.databaseService.getClient().query<TicketRow>(
@@ -123,7 +127,12 @@ export class SupportService {
             ) u WHERE u.id = opened_by
           ), 'Unknown user') AS requester
       `,
-      [ticketId, dto.status ?? null, dto.priority ?? null, dto.assignedTo ?? null],
+      [
+        ticketId,
+        dto.status ?? null,
+        dto.priority ?? null,
+        dto.assignedTo ?? null,
+      ],
     );
     if (!result.rows[0]) throw new NotFoundException('Ticket not found.');
     return this.toTicket(result.rows[0]);
@@ -154,7 +163,12 @@ export class SupportService {
         VALUES ($1, $2, $3, $4)
         RETURNING id, author_role, body, created_at
       `,
-      [ticketId, user.id, user.role === 'admin' ? 'admin' : 'requester', dto.body.trim()],
+      [
+        ticketId,
+        user.id,
+        user.role === 'admin' ? 'admin' : 'requester',
+        dto.body.trim(),
+      ],
     );
     return {
       id: message.rows[0].id,
@@ -237,7 +251,9 @@ export class SupportService {
       `,
       [user.id],
     );
-    const senderName = senderRes.rows[0]?.name || (user.role === 'admin' ? 'Administrator' : 'Staff');
+    const senderName =
+      senderRes.rows[0]?.name ||
+      (user.role === 'admin' ? 'Administrator' : 'Staff');
 
     let recipientName = dto.recipientName;
     if (!recipientName) {
@@ -305,7 +321,9 @@ export class SupportService {
       title: ticket.subject,
       requester: ticket.requester,
       priority: this.titleCase(ticket.priority),
-      status: this.titleCase(ticket.status === 'in_progress' ? 'In Progress' : ticket.status),
+      status: this.titleCase(
+        ticket.status === 'in_progress' ? 'In Progress' : ticket.status,
+      ),
       createdAt: ticket.opened_at,
       description: ticket.description,
       messages: messages.rows.map((message) => ({
@@ -318,6 +336,8 @@ export class SupportService {
   }
 
   private titleCase(value: string) {
-    return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return value
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 }

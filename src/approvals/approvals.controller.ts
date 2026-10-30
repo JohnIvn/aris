@@ -36,4 +36,3 @@ export class ApprovalsController {
     return this.approvalsService.handleDecision(user, { ...data, id });
   }
 }
-

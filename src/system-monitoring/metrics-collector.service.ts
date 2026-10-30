@@ -28,15 +28,47 @@ export class MetricsCollectorService {
     string,
     { count: number; errorCount: number; durations: number[] }
   > = {
-    'POST /auth/signin': { count: 42, errorCount: 1, durations: [35, 42, 48, 60, 52] },
-    'GET /auth/verify': { count: 88, errorCount: 0, durations: [15, 18, 22, 25, 20] },
-    'GET /professors': { count: 56, errorCount: 0, durations: [28, 35, 44, 40, 32] },
+    'POST /auth/signin': {
+      count: 42,
+      errorCount: 1,
+      durations: [35, 42, 48, 60, 52],
+    },
+    'GET /auth/verify': {
+      count: 88,
+      errorCount: 0,
+      durations: [15, 18, 22, 25, 20],
+    },
+    'GET /professors': {
+      count: 56,
+      errorCount: 0,
+      durations: [28, 35, 44, 40, 32],
+    },
     'GET /staff': { count: 34, errorCount: 0, durations: [22, 30, 38, 28, 25] },
-    'GET /curriculum/departments': { count: 26, errorCount: 0, durations: [18, 24, 28, 22] },
-    'GET /announcements': { count: 45, errorCount: 0, durations: [20, 26, 30, 25] },
-    'GET /system/logs': { count: 62, errorCount: 0, durations: [30, 42, 50, 45, 38] },
-    'GET /system/monitoring': { count: 75, errorCount: 0, durations: [25, 32, 40, 35] },
-    'GET /reports': { count: 18, errorCount: 1, durations: [120, 150, 180, 220, 195] },
+    'GET /curriculum/departments': {
+      count: 26,
+      errorCount: 0,
+      durations: [18, 24, 28, 22],
+    },
+    'GET /announcements': {
+      count: 45,
+      errorCount: 0,
+      durations: [20, 26, 30, 25],
+    },
+    'GET /system/logs': {
+      count: 62,
+      errorCount: 0,
+      durations: [30, 42, 50, 45, 38],
+    },
+    'GET /system/monitoring': {
+      count: 75,
+      errorCount: 0,
+      durations: [25, 32, 40, 35],
+    },
+    'GET /reports': {
+      count: 18,
+      errorCount: 1,
+      durations: [120, 150, 180, 220, 195],
+    },
   };
 
   /**
@@ -55,7 +87,12 @@ export class MetricsCollectorService {
   /**
    * Record a completed HTTP request
    */
-  record(method: string, rawUrl: string, statusCode: number, durationMs: number) {
+  record(
+    method: string,
+    rawUrl: string,
+    statusCode: number,
+    durationMs: number,
+  ) {
     const path = this.normalizePath(rawUrl);
     const key = `${method.toUpperCase()} ${path}`;
 
@@ -97,8 +134,7 @@ export class MetricsCollectorService {
       const p95Index = Math.floor(sorted.length * 0.95);
       const p95 = sorted[p95Index] || sorted[sorted.length - 1] || 25;
 
-      const errorRate =
-        ep.count > 0 ? (ep.errorCount / ep.count) * 100 : 0;
+      const errorRate = ep.count > 0 ? (ep.errorCount / ep.count) * 100 : 0;
 
       // Realistic requests per second based on count and server uptime window
       const uptimeSec = Math.max(1, (Date.now() - this.serverStartTime) / 1000);
@@ -200,7 +236,10 @@ export class MetricsCollectorService {
 
     const errorsSeries = timeLabels.map((_, i) => {
       const errCount = this.records.filter((r) => r.statusCode >= 400).length;
-      const val = Math.max(0.1, Number(((errCount + (i % 3 === 0 ? 0.6 : 0.1)) * 0.4).toFixed(1)));
+      const val = Math.max(
+        0.1,
+        Number(((errCount + (i % 3 === 0 ? 0.6 : 0.1)) * 0.4).toFixed(1)),
+      );
       return val;
     });
 
@@ -226,4 +265,3 @@ export class MetricsCollectorService {
     };
   }
 }
-

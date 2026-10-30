@@ -29,7 +29,14 @@ export class CurriculumService {
   // --- OVERVIEW ---
   async getOverview() {
     try {
-      const [collegesRes, departmentsRes, programsRes, ranksRes, coursesRes, countsRes] = await Promise.all([
+      const [
+        collegesRes,
+        departmentsRes,
+        programsRes,
+        ranksRes,
+        coursesRes,
+        countsRes,
+      ] = await Promise.all([
         this.client.query(`
           SELECT col.*,
                  (SELECT COUNT(*)::int FROM departments d WHERE d.college_id = col.id OR d.college_name = col.name) AS department_count,
@@ -147,10 +154,17 @@ export class CurriculumService {
         [code, name, desc, isActive],
       );
 
-      return SuccessHandler('College created successfully', 201, result.rows[0]);
+      return SuccessHandler(
+        'College created successfully',
+        201,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('A college with that code or name already exists.', 409);
+        return ErrorHandler(
+          'A college with that code or name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -160,16 +174,26 @@ export class CurriculumService {
 
   async updateCollege(id: string, dto: UpdateCollegeDto) {
     try {
-      const current = await this.client.query('SELECT * FROM colleges WHERE id = $1', [id]);
+      const current = await this.client.query(
+        'SELECT * FROM colleges WHERE id = $1',
+        [id],
+      );
       if (current.rows.length === 0) {
         return ErrorHandler('College not found', 404);
       }
 
       const existing = current.rows[0];
-      const code = dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
+      const code =
+        dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
       const name = dto.name !== undefined ? dto.name.trim() : existing.name;
-      const desc = dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description;
-      const isActive = dto.is_active !== undefined ? dto.is_active : existing.is_active;
+      const desc =
+        dto.description !== undefined
+          ? dto.description
+            ? dto.description.trim()
+            : null
+          : existing.description;
+      const isActive =
+        dto.is_active !== undefined ? dto.is_active : existing.is_active;
 
       const result = await this.client.query(
         `UPDATE colleges
@@ -199,10 +223,17 @@ export class CurriculumService {
         );
       }
 
-      return SuccessHandler('College updated successfully', 200, result.rows[0]);
+      return SuccessHandler(
+        'College updated successfully',
+        200,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('A college with that code or name already exists.', 409);
+        return ErrorHandler(
+          'A college with that code or name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -212,7 +243,10 @@ export class CurriculumService {
 
   async deleteCollege(id: string) {
     try {
-      const check = await this.client.query('SELECT * FROM colleges WHERE id = $1', [id]);
+      const check = await this.client.query(
+        'SELECT * FROM colleges WHERE id = $1',
+        [id],
+      );
       if (check.rows.length === 0) {
         return ErrorHandler('College not found', 404);
       }
@@ -221,9 +255,18 @@ export class CurriculumService {
 
       // Check if departments or programs are tied to this college
       const [deptCount, progCount, profCount] = await Promise.all([
-        this.client.query('SELECT COUNT(*)::int AS count FROM departments WHERE college_id = $1 OR college_name = $2', [id, colName]),
-        this.client.query('SELECT COUNT(*)::int AS count FROM programs WHERE college_id = $1 OR college_name = $2', [id, colName]),
-        this.client.query('SELECT COUNT(*)::int AS count FROM user_professors WHERE department = $1', [colName]),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM departments WHERE college_id = $1 OR college_name = $2',
+          [id, colName],
+        ),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM programs WHERE college_id = $1 OR college_name = $2',
+          [id, colName],
+        ),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM user_professors WHERE department = $1',
+          [colName],
+        ),
       ]);
 
       const depts = deptCount.rows[0]?.count || 0;
@@ -283,7 +326,11 @@ export class CurriculumService {
       query += ` ORDER BY d.name ASC`;
 
       const result = await this.client.query(query, params);
-      return SuccessHandler('Departments fetched successfully', 200, result.rows);
+      return SuccessHandler(
+        'Departments fetched successfully',
+        200,
+        result.rows,
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -303,13 +350,19 @@ export class CurriculumService {
 
       // Automatically look up college_id if college_name is provided
       if (collegeName && !collegeId) {
-        const colRes = await this.client.query('SELECT id, name FROM colleges WHERE name = $1 LIMIT 1', [collegeName]);
+        const colRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE name = $1 LIMIT 1',
+          [collegeName],
+        );
         if (colRes.rows.length > 0) {
           collegeId = colRes.rows[0].id;
           collegeName = colRes.rows[0].name;
         }
       } else if (collegeId && !collegeName) {
-        const colRes = await this.client.query('SELECT id, name FROM colleges WHERE id = $1 LIMIT 1', [collegeId]);
+        const colRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE id = $1 LIMIT 1',
+          [collegeId],
+        );
         if (colRes.rows.length > 0) {
           collegeName = colRes.rows[0].name;
         }
@@ -322,10 +375,17 @@ export class CurriculumService {
         [code, name, collegeId, collegeName, desc, isActive],
       );
 
-      return SuccessHandler('Department created successfully', 201, result.rows[0]);
+      return SuccessHandler(
+        'Department created successfully',
+        201,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('A department with that code or name already exists.', 409);
+        return ErrorHandler(
+          'A department with that code or name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -335,28 +395,50 @@ export class CurriculumService {
 
   async updateDepartment(id: string, dto: UpdateDepartmentDto) {
     try {
-      const current = await this.client.query('SELECT * FROM departments WHERE id = $1', [id]);
+      const current = await this.client.query(
+        'SELECT * FROM departments WHERE id = $1',
+        [id],
+      );
       if (current.rows.length === 0) {
         return ErrorHandler('Department not found', 404);
       }
 
       const existing = current.rows[0];
-      const code = dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
+      const code =
+        dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
       const name = dto.name !== undefined ? dto.name.trim() : existing.name;
-      const desc = dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description;
-      const isActive = dto.is_active !== undefined ? dto.is_active : existing.is_active;
+      const desc =
+        dto.description !== undefined
+          ? dto.description
+            ? dto.description.trim()
+            : null
+          : existing.description;
+      const isActive =
+        dto.is_active !== undefined ? dto.is_active : existing.is_active;
 
-      let collegeId = dto.college_id !== undefined ? dto.college_id : existing.college_id;
-      let collegeName = dto.college_name !== undefined ? (dto.college_name ? dto.college_name.trim() : null) : existing.college_name;
+      let collegeId =
+        dto.college_id !== undefined ? dto.college_id : existing.college_id;
+      let collegeName =
+        dto.college_name !== undefined
+          ? dto.college_name
+            ? dto.college_name.trim()
+            : null
+          : existing.college_name;
 
       if (collegeName && !collegeId) {
-        const colRes = await this.client.query('SELECT id, name FROM colleges WHERE name = $1 LIMIT 1', [collegeName]);
+        const colRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE name = $1 LIMIT 1',
+          [collegeName],
+        );
         if (colRes.rows.length > 0) {
           collegeId = colRes.rows[0].id;
           collegeName = colRes.rows[0].name;
         }
       } else if (collegeId && !collegeName) {
-        const colRes = await this.client.query('SELECT id, name FROM colleges WHERE id = $1 LIMIT 1', [collegeId]);
+        const colRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE id = $1 LIMIT 1',
+          [collegeId],
+        );
         if (colRes.rows.length > 0) {
           collegeName = colRes.rows[0].name;
         }
@@ -396,10 +478,17 @@ export class CurriculumService {
         );
       }
 
-      return SuccessHandler('Department updated successfully', 200, result.rows[0]);
+      return SuccessHandler(
+        'Department updated successfully',
+        200,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('A department with that code or name already exists.', 409);
+        return ErrorHandler(
+          'A department with that code or name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -409,7 +498,10 @@ export class CurriculumService {
 
   async deleteDepartment(id: string) {
     try {
-      const check = await this.client.query('SELECT * FROM departments WHERE id = $1', [id]);
+      const check = await this.client.query(
+        'SELECT * FROM departments WHERE id = $1',
+        [id],
+      );
       if (check.rows.length === 0) {
         return ErrorHandler('Department not found', 404);
       }
@@ -418,9 +510,18 @@ export class CurriculumService {
 
       // Check if programs, professors or courses are actively tied to this department
       const [progCount, profCount, courseCount] = await Promise.all([
-        this.client.query('SELECT COUNT(*)::int AS count FROM programs WHERE department_id = $1 OR department_name = $2', [id, deptName]),
-        this.client.query('SELECT COUNT(*)::int AS count FROM user_professors WHERE department = $1', [deptName]),
-        this.client.query('SELECT COUNT(*)::int AS count FROM curriculum_courses WHERE department_id = $1 OR department_name = $2', [id, deptName]),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM programs WHERE department_id = $1 OR department_name = $2',
+          [id, deptName],
+        ),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM user_professors WHERE department = $1',
+          [deptName],
+        ),
+        this.client.query(
+          'SELECT COUNT(*)::int AS count FROM curriculum_courses WHERE department_id = $1 OR department_name = $2',
+          [id, deptName],
+        ),
       ]);
 
       const progs = progCount.rows[0]?.count || 0;
@@ -498,7 +599,10 @@ export class CurriculumService {
 
       // Look up department info if name provided
       if (deptName && !deptId) {
-        const dRes = await this.client.query('SELECT id, name, college_id, college_name FROM departments WHERE name = $1 LIMIT 1', [deptName]);
+        const dRes = await this.client.query(
+          'SELECT id, name, college_id, college_name FROM departments WHERE name = $1 LIMIT 1',
+          [deptName],
+        );
         if (dRes.rows.length > 0) {
           deptId = dRes.rows[0].id;
           deptName = dRes.rows[0].name;
@@ -506,7 +610,10 @@ export class CurriculumService {
           if (!collegeName) collegeName = dRes.rows[0].college_name;
         }
       } else if (deptId && !deptName) {
-        const dRes = await this.client.query('SELECT id, name, college_id, college_name FROM departments WHERE id = $1 LIMIT 1', [deptId]);
+        const dRes = await this.client.query(
+          'SELECT id, name, college_id, college_name FROM departments WHERE id = $1 LIMIT 1',
+          [deptId],
+        );
         if (dRes.rows.length > 0) {
           deptName = dRes.rows[0].name;
           if (!collegeId) collegeId = dRes.rows[0].college_id;
@@ -516,13 +623,19 @@ export class CurriculumService {
 
       // Look up college info if name provided
       if (collegeName && !collegeId) {
-        const cRes = await this.client.query('SELECT id, name FROM colleges WHERE name = $1 LIMIT 1', [collegeName]);
+        const cRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE name = $1 LIMIT 1',
+          [collegeName],
+        );
         if (cRes.rows.length > 0) {
           collegeId = cRes.rows[0].id;
           collegeName = cRes.rows[0].name;
         }
       } else if (collegeId && !collegeName) {
-        const cRes = await this.client.query('SELECT id, name FROM colleges WHERE id = $1 LIMIT 1', [collegeId]);
+        const cRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE id = $1 LIMIT 1',
+          [collegeId],
+        );
         if (cRes.rows.length > 0) {
           collegeName = cRes.rows[0].name;
         }
@@ -535,10 +648,17 @@ export class CurriculumService {
         [code, name, deptId, deptName, collegeId, collegeName, desc, isActive],
       );
 
-      return SuccessHandler('Program created successfully', 201, result.rows[0]);
+      return SuccessHandler(
+        'Program created successfully',
+        201,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('A program with that code or name already exists.', 409);
+        return ErrorHandler(
+          'A program with that code or name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -548,24 +668,51 @@ export class CurriculumService {
 
   async updateProgram(id: string, dto: UpdateProgramDto) {
     try {
-      const current = await this.client.query('SELECT * FROM programs WHERE id = $1', [id]);
+      const current = await this.client.query(
+        'SELECT * FROM programs WHERE id = $1',
+        [id],
+      );
       if (current.rows.length === 0) {
         return ErrorHandler('Program not found', 404);
       }
 
       const existing = current.rows[0];
-      const code = dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
+      const code =
+        dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
       const name = dto.name !== undefined ? dto.name.trim() : existing.name;
-      const desc = dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description;
-      const isActive = dto.is_active !== undefined ? dto.is_active : existing.is_active;
+      const desc =
+        dto.description !== undefined
+          ? dto.description
+            ? dto.description.trim()
+            : null
+          : existing.description;
+      const isActive =
+        dto.is_active !== undefined ? dto.is_active : existing.is_active;
 
-      let deptId = dto.department_id !== undefined ? dto.department_id : existing.department_id;
-      let deptName = dto.department_name !== undefined ? (dto.department_name ? dto.department_name.trim() : null) : existing.department_name;
-      let collegeId = dto.college_id !== undefined ? dto.college_id : existing.college_id;
-      let collegeName = dto.college_name !== undefined ? (dto.college_name ? dto.college_name.trim() : null) : existing.college_name;
+      let deptId =
+        dto.department_id !== undefined
+          ? dto.department_id
+          : existing.department_id;
+      let deptName =
+        dto.department_name !== undefined
+          ? dto.department_name
+            ? dto.department_name.trim()
+            : null
+          : existing.department_name;
+      let collegeId =
+        dto.college_id !== undefined ? dto.college_id : existing.college_id;
+      let collegeName =
+        dto.college_name !== undefined
+          ? dto.college_name
+            ? dto.college_name.trim()
+            : null
+          : existing.college_name;
 
       if (deptName && !deptId) {
-        const dRes = await this.client.query('SELECT id, name, college_id, college_name FROM departments WHERE name = $1 LIMIT 1', [deptName]);
+        const dRes = await this.client.query(
+          'SELECT id, name, college_id, college_name FROM departments WHERE name = $1 LIMIT 1',
+          [deptName],
+        );
         if (dRes.rows.length > 0) {
           deptId = dRes.rows[0].id;
           deptName = dRes.rows[0].name;
@@ -573,7 +720,10 @@ export class CurriculumService {
           if (!collegeName) collegeName = dRes.rows[0].college_name;
         }
       } else if (deptId && !deptName) {
-        const dRes = await this.client.query('SELECT id, name, college_id, college_name FROM departments WHERE id = $1 LIMIT 1', [deptId]);
+        const dRes = await this.client.query(
+          'SELECT id, name, college_id, college_name FROM departments WHERE id = $1 LIMIT 1',
+          [deptId],
+        );
         if (dRes.rows.length > 0) {
           deptName = dRes.rows[0].name;
           if (!collegeId) collegeId = dRes.rows[0].college_id;
@@ -582,13 +732,19 @@ export class CurriculumService {
       }
 
       if (collegeName && !collegeId) {
-        const cRes = await this.client.query('SELECT id, name FROM colleges WHERE name = $1 LIMIT 1', [collegeName]);
+        const cRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE name = $1 LIMIT 1',
+          [collegeName],
+        );
         if (cRes.rows.length > 0) {
           collegeId = cRes.rows[0].id;
           collegeName = cRes.rows[0].name;
         }
       } else if (collegeId && !collegeName) {
-        const cRes = await this.client.query('SELECT id, name FROM colleges WHERE id = $1 LIMIT 1', [collegeId]);
+        const cRes = await this.client.query(
+          'SELECT id, name FROM colleges WHERE id = $1 LIMIT 1',
+          [collegeId],
+        );
         if (cRes.rows.length > 0) {
           collegeName = cRes.rows[0].name;
         }
@@ -607,13 +763,30 @@ export class CurriculumService {
                 updated_at = NOW()
           WHERE id = $9
           RETURNING *`,
-        [code, name, deptId, deptName, collegeId, collegeName, desc, isActive, id],
+        [
+          code,
+          name,
+          deptId,
+          deptName,
+          collegeId,
+          collegeName,
+          desc,
+          isActive,
+          id,
+        ],
       );
 
-      return SuccessHandler('Program updated successfully', 200, result.rows[0]);
+      return SuccessHandler(
+        'Program updated successfully',
+        200,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('A program with that code or name already exists.', 409);
+        return ErrorHandler(
+          'A program with that code or name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -623,7 +796,10 @@ export class CurriculumService {
 
   async deleteProgram(id: string) {
     try {
-      const check = await this.client.query('SELECT * FROM programs WHERE id = $1', [id]);
+      const check = await this.client.query(
+        'SELECT * FROM programs WHERE id = $1',
+        [id],
+      );
       if (check.rows.length === 0) {
         return ErrorHandler('Program not found', 404);
       }
@@ -659,7 +835,11 @@ export class CurriculumService {
              FROM academic_ranks r
             ORDER BY r.hierarchy_level ASC, r.name ASC`;
       const result = await this.client.query(query);
-      return SuccessHandler('Academic ranks fetched successfully', 200, result.rows);
+      return SuccessHandler(
+        'Academic ranks fetched successfully',
+        200,
+        result.rows,
+      );
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -671,7 +851,8 @@ export class CurriculumService {
     try {
       const name = dto.name.trim();
       const code = dto.code ? dto.code.trim().toUpperCase() : null;
-      const level = dto.hierarchy_level !== undefined ? Number(dto.hierarchy_level) : 1;
+      const level =
+        dto.hierarchy_level !== undefined ? Number(dto.hierarchy_level) : 1;
       const desc = dto.description?.trim() || null;
       const isActive = dto.is_active !== undefined ? dto.is_active : true;
 
@@ -682,10 +863,17 @@ export class CurriculumService {
         [name, code, level, desc, isActive],
       );
 
-      return SuccessHandler('Academic rank created successfully', 201, result.rows[0]);
+      return SuccessHandler(
+        'Academic rank created successfully',
+        201,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('An academic rank with that name already exists.', 409);
+        return ErrorHandler(
+          'An academic rank with that name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -695,17 +883,34 @@ export class CurriculumService {
 
   async updateRank(id: string, dto: UpdateRankDto) {
     try {
-      const current = await this.client.query('SELECT * FROM academic_ranks WHERE id = $1', [id]);
+      const current = await this.client.query(
+        'SELECT * FROM academic_ranks WHERE id = $1',
+        [id],
+      );
       if (current.rows.length === 0) {
         return ErrorHandler('Academic rank not found', 404);
       }
 
       const existing = current.rows[0];
       const name = dto.name !== undefined ? dto.name.trim() : existing.name;
-      const code = dto.code !== undefined ? (dto.code ? dto.code.trim().toUpperCase() : null) : existing.code;
-      const level = dto.hierarchy_level !== undefined ? Number(dto.hierarchy_level) : existing.hierarchy_level;
-      const desc = dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description;
-      const isActive = dto.is_active !== undefined ? dto.is_active : existing.is_active;
+      const code =
+        dto.code !== undefined
+          ? dto.code
+            ? dto.code.trim().toUpperCase()
+            : null
+          : existing.code;
+      const level =
+        dto.hierarchy_level !== undefined
+          ? Number(dto.hierarchy_level)
+          : existing.hierarchy_level;
+      const desc =
+        dto.description !== undefined
+          ? dto.description
+            ? dto.description.trim()
+            : null
+          : existing.description;
+      const isActive =
+        dto.is_active !== undefined ? dto.is_active : existing.is_active;
 
       const result = await this.client.query(
         `UPDATE academic_ranks
@@ -728,10 +933,17 @@ export class CurriculumService {
         );
       }
 
-      return SuccessHandler('Academic rank updated successfully', 200, result.rows[0]);
+      return SuccessHandler(
+        'Academic rank updated successfully',
+        200,
+        result.rows[0],
+      );
     } catch (error: any) {
       if (error?.code === '23505') {
-        return ErrorHandler('An academic rank with that name already exists.', 409);
+        return ErrorHandler(
+          'An academic rank with that name already exists.',
+          409,
+        );
       }
       return error instanceof Error
         ? ErrorHandler(error.message, 500)
@@ -741,7 +953,10 @@ export class CurriculumService {
 
   async deleteRank(id: string) {
     try {
-      const check = await this.client.query('SELECT * FROM academic_ranks WHERE id = $1', [id]);
+      const check = await this.client.query(
+        'SELECT * FROM academic_ranks WHERE id = $1',
+        [id],
+      );
       if (check.rows.length === 0) {
         return ErrorHandler('Academic rank not found', 404);
       }
@@ -836,19 +1051,38 @@ export class CurriculumService {
 
   async updateCourse(id: string, dto: UpdateCourseDto) {
     try {
-      const current = await this.client.query('SELECT * FROM curriculum_courses WHERE id = $1', [id]);
+      const current = await this.client.query(
+        'SELECT * FROM curriculum_courses WHERE id = $1',
+        [id],
+      );
       if (current.rows.length === 0) {
         return ErrorHandler('Course not found', 404);
       }
 
       const existing = current.rows[0];
-      const code = dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
+      const code =
+        dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
       const title = dto.title !== undefined ? dto.title.trim() : existing.title;
-      const deptName = dto.department_name !== undefined ? (dto.department_name ? dto.department_name.trim() : null) : existing.department_name;
-      const deptId = dto.department_id !== undefined ? dto.department_id : existing.department_id;
-      const units = dto.units !== undefined ? Number(dto.units) : existing.units;
-      const desc = dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : existing.description;
-      const isActive = dto.is_active !== undefined ? dto.is_active : existing.is_active;
+      const deptName =
+        dto.department_name !== undefined
+          ? dto.department_name
+            ? dto.department_name.trim()
+            : null
+          : existing.department_name;
+      const deptId =
+        dto.department_id !== undefined
+          ? dto.department_id
+          : existing.department_id;
+      const units =
+        dto.units !== undefined ? Number(dto.units) : existing.units;
+      const desc =
+        dto.description !== undefined
+          ? dto.description
+            ? dto.description.trim()
+            : null
+          : existing.description;
+      const isActive =
+        dto.is_active !== undefined ? dto.is_active : existing.is_active;
 
       const result = await this.client.query(
         `UPDATE curriculum_courses
@@ -878,12 +1112,17 @@ export class CurriculumService {
 
   async deleteCourse(id: string) {
     try {
-      const check = await this.client.query('SELECT * FROM curriculum_courses WHERE id = $1', [id]);
+      const check = await this.client.query(
+        'SELECT * FROM curriculum_courses WHERE id = $1',
+        [id],
+      );
       if (check.rows.length === 0) {
         return ErrorHandler('Course not found', 404);
       }
 
-      await this.client.query('DELETE FROM curriculum_courses WHERE id = $1', [id]);
+      await this.client.query('DELETE FROM curriculum_courses WHERE id = $1', [
+        id,
+      ]);
       void this.loggerService.logSystemEvent({
         actor_label: 'Administrator',
         kind: 'alert',
