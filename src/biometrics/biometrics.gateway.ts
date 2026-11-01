@@ -18,20 +18,6 @@ import {
   UserType,
 } from './biometrics.service';
 
-/**
- * Raw WebSocket endpoint: ws(s)://<host>/biometrics
- *
- *  ESP32 device : /biometrics?deviceId=aris-bio-001            Authorization: Bearer BIOMETRIC_DEVICE_TOKEN
- *  Admin client : /biometrics?role=client&token=<CLIENT_TOKEN>  (token == BIOMETRIC_CLIENT_TOKEN)
- *
- * NOT a Nest @WebSocketGateway: it attaches a plain `ws` server to Nest's HTTP server and only
- * handles upgrades for /biometrics, so it coexists with the Socket.IO RealtimeGateway
- * (keep the default IoAdapter; do NOT register WsAdapter). Messages use the aris-biometric
- * envelope, NOT { event, data }.
- *
- * Client commands: ping, device_status, register, verify, reset_registrations, punch, today
- */
-
 const PROTOCOL = 'aris-biometric';
 const PENDING_TTL_MS = 90_000;
 

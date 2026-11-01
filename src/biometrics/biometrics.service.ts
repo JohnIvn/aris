@@ -25,6 +25,12 @@ export interface EnrolledBiometricRecord {
   avatar_url: string | null;
 }
 
+interface AuthenticatorsData {
+  id: string;
+  tag: string;
+  is_registered: boolean;
+}
+
 export type UserType = 'professor' | 'staff';
 export type CredentialKind = 'biometric' | 'authenticator' | 'nfc' | 'rfid';
 export type PunchAction =
@@ -681,6 +687,109 @@ export class BiometricsService {
       return SuccessHandler('Biometric record deleted successfully', 200, {
         id,
       });
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500, error.name)
+        : ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  async registerAuthenticator() {
+    try {
+      // TODO
+      // GET THE BUILT IN TAG ON THE ESP32 WHEN GATEWAY IS OPEN
+      const authenticator_tag = 'auth-00001'; // Temporary
+
+      const exists = await this.db.query(
+        `SELECT * FROM authenticators 
+        WHERE tag = $1
+        LIMIT 1`,
+        [authenticator_tag],
+      );
+
+      if (exists) {
+        return ErrorHandler('Authenticator already registered', 409);
+      }
+
+      if (!authenticator_tag.startsWith('auth')) {
+        return ErrorHandler('Authenticator Tag is invalid', 400);
+      }
+
+      const register = await this.db.query<AuthenticatorsData>(
+        `INSERT INTO authenticators 
+        (tag)
+        VALUES ($1)
+        `,
+        [authenticator_tag],
+      );
+
+      if (!register) {
+        return ErrorHandler('Failed to Register Authenticator', 404);
+      }
+
+      return SuccessHandler('Successfully removed authenticator', 201);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500, error.name)
+        : ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  async removeAuthenticator(authenticator_tag: string) {
+    try {
+      const authenticator_result = await this.db.query<AuthenticatorsData>(
+        `SELECT * FROM authenticators
+        WHERE tag = $1`,
+        [authenticator_tag],
+      );
+
+      if (!authenticator_result) {
+        return ErrorHandler('Authenticator Not Found', 404);
+      }
+
+      const remove_result = await this.db.query(
+        `DELETE FROM authenticators
+        WHERE id = $1`,
+        [authenticator_result.rows[0].id],
+      );
+
+      if (!remove_result) {
+        return ErrorHandler('Error removing authenticator', 500);
+      }
+
+      return SuccessHandler('Successfully removed authenticator');
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500, error.name)
+        : ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  async resetFingerprintRecords(authenticator_id: string) {
+    try {
+      const exists = await this.db.query(
+        'SELECT * FROM authenticators WHERE id = $1 LIMIT 1',
+        [authenticator_id],
+      );
+
+      if (!exists) {
+        return ErrorHandler('Authenticator Not Found', 404);
+      }
+
+      // TODO
+      // Create Gateway command to reset the fingerprint records of the esp32
+
+      const removed = await this.db.query(
+        `DELETE FROM authenticators 
+        WHERE id = $1`,
+        [authenticator_id],
+      );
+
+      if (!removed) {
+        return ErrorHandler('Failed to remove Authenticator', 404);
+      }
+
+      return SuccessHandler('Successfully removed authenticator', 201);
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500, error.name)
