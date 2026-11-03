@@ -6,7 +6,9 @@ export default async function createAuthenticatorModel(client: Pool) {
 
     CREATE TABLE IF NOT EXISTS authenticators (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tag TEXT UNIQUE DEFAULT CONCAT('auth', NEXTVAL('authenticator_tag_seq')),
+      tag TEXT UNIQUE DEFAULT (
+          'auth-' || LPAD(NEXTVAL('authenticator_tag_seq')::TEXT, 5, '0')
+      ),
       is_registered BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
