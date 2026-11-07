@@ -14,7 +14,6 @@ import { FastifyRequest } from 'fastify';
 import { BiometricsError, BiometricsService } from './biometrics.service';
 import { SuccessHandler } from '../lib/utils/handlers';
 
-/** Checks "Authorization: Bearer <BIOMETRIC_DEVICE_TOKEN>". Unset env = open (dev only). */
 @Injectable()
 export class DeviceTokenGuard implements CanActivate {
   canActivate(ctx: ExecutionContext): boolean {

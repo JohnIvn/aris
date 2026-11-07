@@ -4,6 +4,7 @@ import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { EnrollBiometricDto } from './dto/enroll-biometric.dto';
+import { UserRoles } from '../lib/data/types';
 
 export interface EnrolledBiometricRecord {
   id: string;
@@ -16,7 +17,7 @@ export interface EnrolledBiometricRecord {
   updated_at: string;
   professor_id: string | null;
   staff_id: string | null;
-  user_type: 'professor' | 'staff' | 'unassigned';
+  user_type: UserRoles;
   employee_id: string;
   name: string;
   email: string;
@@ -40,8 +41,8 @@ export class BiometricsError extends Error {
 }
 
 export interface Owner {
-  biometricsRowId: string; // dtr_biometrics.id (UUID)
-  slot: string | null; // dtr_biometrics.biometrics_id (fingerprint slot as text); this is what dtr.biometrics_id references
+  biometricsRowId: string;
+  slot: string | null;
   professorId: string | null;
   staffId: string | null;
   viaAuthenticator: boolean;
@@ -447,7 +448,7 @@ export class BiometricsService {
           updated_at: row.updated_at,
           professor_id: row.professor_id,
           staff_id: row.staff_id,
-          user_type: isProf ? 'professor' : isStaff ? 'staff' : 'unassigned',
+          user_type: row.role,
           employee_id,
           name,
           email,
