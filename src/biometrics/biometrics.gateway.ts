@@ -67,7 +67,7 @@ export class BiometricsGateway
     );
     http.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-      if (pathname !== WS_PATH) return; // not ours: Socket.IO handles its own paths
+      if (pathname !== WS_PATH) return;
       this.wss.handleUpgrade(req, socket, head, (ws) =>
         this.wss.emit('connection', ws, req),
       );

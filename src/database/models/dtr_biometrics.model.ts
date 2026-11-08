@@ -8,6 +8,7 @@ export default async function createDtrBiometricsModel(client: Pool) {
         staff_id UUID REFERENCES user_staffs(id) ON DELETE CASCADE,
         biometrics_id TEXT DEFAULT NULL,
         biometrics_fingerprint TEXT DEFAULT NULL,
+        authenticator_tag TEXT REFERENCES authenticators(tag) ON DELETE SET NULL ON UPDATE CASCADE,
         authenticator_fingerprint TEXT DEFAULT NULL,
         nfc_id TEXT DEFAULT NULL,
         rfid TEXT DEFAULT NULL,
