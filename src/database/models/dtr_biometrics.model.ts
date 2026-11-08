@@ -16,4 +16,19 @@ export default async function createDtrBiometricsModel(client: Pool) {
         updated_at TIMESTAMP DEFAULT NOW()
     ) 
     `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS
+      uq_authenticator_fingerprint
+    ON dtr_biometrics(authenticator_tag, authenticator_fingerprint)
+    WHERE authenticator_tag IS NOT NULL
+      AND authenticator_fingerprint IS NOT NULL;
+      `);
+
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS
+      uq_dtr_biometrics_staff
+    ON dtr_biometrics(staff_id)
+    WHERE staff_id IS NOT NULL;
+    `);
 }
