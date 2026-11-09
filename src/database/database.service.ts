@@ -130,13 +130,13 @@ export class DatabaseService implements OnModuleInit {
       await createMeetingLogs(this.pool);
       await createHardwareEvents(this.pool);
       await createSoftwareMonitoring(this.pool);
+      await createAuthenticatorModel(this.pool);
+      await createDtrBiometricsModel(this.pool);
       await createDtrModel(this.pool);
       await createUserPreferences(this.pool);
       await createUserNotifications(this.pool);
       await createCurriculumModel(this.pool);
       await createDirectMessages(this.pool);
-      await createDtrBiometricsModel(this.pool);
-      await createAuthenticatorModel(this.pool);
       await this.pool.query(`
         ALTER TABLE user_admins ADD COLUMN IF NOT EXISTS phone TEXT;
         ALTER TABLE user_professors ADD COLUMN IF NOT EXISTS phone TEXT;

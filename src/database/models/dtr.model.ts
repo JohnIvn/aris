@@ -16,6 +16,10 @@ export default async function createDtrModel(client: Pool) {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
         );
+
+        ALTER TABLE dtr
+          ADD COLUMN IF NOT EXISTS biometrics_id UUID REFERENCES dtr_biometrics(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS on_site BOOLEAN DEFAULT FALSE;
     `,
   );
 }

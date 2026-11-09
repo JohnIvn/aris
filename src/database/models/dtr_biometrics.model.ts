@@ -18,6 +18,18 @@ export default async function createDtrBiometricsModel(client: Pool) {
     `);
 
   await client.query(`
+    ALTER TABLE dtr_biometrics
+      ADD COLUMN IF NOT EXISTS biometrics_id TEXT DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS biometrics_fingerprint TEXT DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS authenticator_tag TEXT REFERENCES authenticators(tag) ON DELETE SET NULL ON UPDATE CASCADE,
+      ADD COLUMN IF NOT EXISTS authenticator_fingerprint TEXT DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS nfc_id TEXT DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS rfid TEXT DEFAULT NULL,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+  `);
+
+  await client.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS
       uq_authenticator_fingerprint
     ON dtr_biometrics(authenticator_tag, authenticator_fingerprint)
