@@ -180,9 +180,21 @@ export class AuditService {
         entriesByReport.set(entry.report_id, list);
       });
 
-      // 4. Fetch DTR entries and group by professor
+      // 4. Fetch submitted DTR documents and their linked daily entries
       const dtrRes = await this.client.query(`
         SELECT
+          ds.id AS submission_id,
+          ds.period_start,
+          ds.period_end,
+          ds.approval_stage,
+          COALESCE(ast.label, ds.approval_stage) AS stage_label,
+          COALESCE(ast.stage_order, 1) AS stage_order,
+          ds.status AS submission_status,
+          ds.remarks,
+          ds.attachment_name,
+          ds.submitted_at,
+          ds.created_at AS submission_created_at,
+          ds.updated_at AS submission_updated_at,
           d.id,
           d.professor_id,
           d.time_in,
@@ -195,9 +207,12 @@ export class AuditService {
           up.employee_id,
           up.department,
           up.email
-        FROM dtr d
+        FROM dtr_submissions ds
+        JOIN dtr_submission_entries dse ON dse.submission_id = ds.id
+        JOIN dtr d ON d.id = dse.dtr_id
+        LEFT JOIN approval_stages ast ON ast.stage_key = ds.approval_stage
         LEFT JOIN user_professors up ON up.id = d.professor_id
-        ORDER BY d.shift_date DESC
+        ORDER BY ds.updated_at DESC, d.shift_date DESC
       `);
 
       // 5. Fetch all professors to detect missing submissions
@@ -370,16 +385,16 @@ export class AuditService {
         });
       }
 
-      // --- PROCESS DTR ENTRIES (Group by Professor) ---
-      const dtrByProf = new Map<string, any[]>();
+      // --- PROCESS DTR SUBMISSION DOCUMENTS ---
+      const dtrBySubmission = new Map<string, any[]>();
       dtrRes.rows.forEach((row) => {
-        const key = row.professor_id || 'unknown';
-        const list = dtrByProf.get(key) || [];
+        const key = row.submission_id;
+        const list = dtrBySubmission.get(key) || [];
         list.push(row);
-        dtrByProf.set(key, list);
+        dtrBySubmission.set(key, list);
       });
 
-      dtrByProf.forEach((logs, profId) => {
+      dtrBySubmission.forEach((logs, submissionId) => {
         if (!logs.length) return;
         const first = logs[0];
         const daysLogged = logs.length;
@@ -387,8 +402,8 @@ export class AuditService {
           .reduce((acc, r) => acc + (Number(r.total_hours) || 0), 0)
           .toFixed(1);
 
-        const startDate = formatDate(logs[logs.length - 1]?.shift_date);
-        const endDate = formatDate(logs[0]?.shift_date);
+        const startDate = formatDate(first.period_start);
+        const endDate = formatDate(first.period_end);
         const periodStr = `${startDate} – ${endDate}`;
 
         const rows = logs
@@ -409,6 +424,8 @@ export class AuditService {
           },
         ];
 
+        const stageOrder = Number(first.stage_order) || 1;
+        const submissionStatus = String(first.submission_status || '').toLowerCase();
         let result:
           | 'Submitted'
           | 'Approved'
@@ -416,24 +433,24 @@ export class AuditService {
           | 'Flagged'
           | 'Missing'
           | 'Pending' = 'Pending';
-        let action = 'DTR submitted';
+        let action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
 
-        if (daysLogged >= 20) {
+        if (submissionStatus === 'rejected' || submissionStatus === 'disapproved') {
+          result = 'Rejected';
+          action = 'DTR rejected · Returned for correction';
+        } else if (submissionStatus === 'approved' || stageOrder >= 4) {
           result = 'Approved';
-          action = 'DTR approved by HR';
-        } else if (daysLogged < 10) {
-          result = 'Flagged';
-          action = 'DTR flagged · Incomplete logs';
+          action = 'DTR approved · Accounting validation complete';
         } else {
           result = 'Pending';
-          action = 'DTR logged · Pending HR verification';
+          action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
         }
 
         const target = `${periodStr} · ${daysLogged} days logged`;
-        const refStr = `DTR-${first.employee_id || 'P000'}-${(first.id || profId).slice(0, 8).toUpperCase()}`;
+        const refStr = `DTR-${first.employee_id || 'P000'}-${submissionId.slice(0, 8).toUpperCase()}`;
 
         auditLogs.push({
-          id: `dtr-${profId}`,
+          id: `dtr-${submissionId}`,
           actor: first.faculty_name,
           init: getInitials(first.faculty_name),
           type: 'DTR',
@@ -441,11 +458,11 @@ export class AuditService {
           target,
           time: formatTime(first.updated_at || first.created_at),
           result,
-          stage: 'HR',
-          stage_role: 'HR',
-          stage_key: 'AR-AP-STG-3',
-          approval_stage: 'AR-AP-STG-3',
-          stage_order: 3,
+          stage: first.stage_label || first.approval_stage,
+          stage_role: first.stage_label || first.approval_stage,
+          stage_key: first.approval_stage,
+          approval_stage: first.approval_stage,
+          stage_order: stageOrder,
           record: {
             period: periodStr,
             reference: refStr,
@@ -455,13 +472,10 @@ export class AuditService {
             email: first.email,
             userId: first.professor_id,
             tables,
-            attachment: `DTR_${first.faculty_name.replace(/[^a-zA-Z]/g, '')}_Logged.xlsx · 92 KB`,
-            reviewer: 'HR Office — Biometric Validation',
-            reviewedAt: `${formatDate(first.updated_at || first.created_at)} · ${formatTime(first.updated_at || first.created_at)}`,
-            remark:
-              daysLogged >= 20
-                ? 'All biometric entries successfully matched against teaching schedule.'
-                : 'Under review for missed time-in stamps or discrepancy validation.',
+            attachment: first.attachment_name || `DTR_${first.faculty_name.replace(/[^a-zA-Z]/g, '')}_Logged.xlsx`,
+            reviewer: first.stage_label || 'Faculty Checker',
+            reviewedAt: `${formatDate(first.submitted_at || first.submission_updated_at || first.submission_created_at)} · ${formatTime(first.submitted_at || first.submission_updated_at || first.submission_created_at)}`,
+            remark: first.remarks || 'Submitted for review.',
           },
         });
       });
