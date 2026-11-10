@@ -187,7 +187,16 @@ export class AuditService {
           ds.period_start,
           ds.period_end,
           ds.approval_stage,
-          COALESCE(ast.label, ds.approval_stage) AS stage_label,
+          COALESCE(
+            ast.label,
+            CASE ds.approval_stage
+              WHEN 'DTR-AP-STG-1' THEN 'Checker'
+              WHEN 'DTR-AP-STG-2' THEN 'Secretary'
+              WHEN 'DTR-AP-STG-3' THEN 'HR'
+              WHEN 'DTR-AP-STG-4' THEN 'Accounting'
+              ELSE ds.approval_stage
+            END
+          ) AS stage_label,
           COALESCE(ast.stage_order, 1) AS stage_order,
           ds.status AS submission_status,
           ds.remarks,

@@ -103,6 +103,20 @@ const NEXT_STAGE_KEY: Record<StageRole, string> = {
   Accounting: 'AR-AP-STG-4',
 };
 
+const DTR_STAGE_KEY_MAP: Record<string, StageRole> = {
+  'DTR-AP-STG-1': 'Checker',
+  'DTR-AP-STG-2': 'Secretary',
+  'DTR-AP-STG-3': 'HR',
+  'DTR-AP-STG-4': 'Accounting',
+};
+
+const DTR_NEXT_STAGE_KEY: Record<StageRole, string> = {
+  Checker: 'DTR-AP-STG-2',
+  Secretary: 'DTR-AP-STG-3',
+  HR: 'DTR-AP-STG-4',
+  Accounting: 'DTR-AP-STG-4',
+};
+
 const STAGE_ROLES: StageRole[] = [
   'Checker',
   'Secretary',
@@ -257,7 +271,16 @@ export class ApprovalsService {
           ds.period_start,
           ds.period_end,
           ds.approval_stage,
-          COALESCE(ast.label, ds.approval_stage) AS stage_label,
+          COALESCE(
+            ast.label,
+            CASE ds.approval_stage
+              WHEN 'DTR-AP-STG-1' THEN 'Checker'
+              WHEN 'DTR-AP-STG-2' THEN 'Secretary'
+              WHEN 'DTR-AP-STG-3' THEN 'HR'
+              WHEN 'DTR-AP-STG-4' THEN 'Accounting'
+              ELSE ds.approval_stage
+            END
+          ) AS stage_label,
           COALESCE(ast.stage_order, 1) AS stage_order,
           ds.status AS submission_status,
           ds.remarks,
@@ -477,7 +500,7 @@ export class ApprovalsService {
         ];
 
         const stage: StageRole =
-          STAGE_KEY_MAP[first.approval_stage] ||
+          DTR_STAGE_KEY_MAP[first.approval_stage] ||
           STAGE_ORDER_MAP[Number(first.stage_order)] ||
           'Checker';
         let status: StatusKind = 'Pending';
@@ -575,7 +598,7 @@ export class ApprovalsService {
         }
 
         const currentStage =
-          STAGE_KEY_MAP[dtrSubmission.rows[0].approval_stage] || 'Checker';
+          DTR_STAGE_KEY_MAP[dtrSubmission.rows[0].approval_stage] || 'Checker';
         if (!currentRole || currentRole !== currentStage) {
           return ErrorHandler('You cannot decide this DTR at its current stage', 403);
         }
@@ -583,7 +606,7 @@ export class ApprovalsService {
         const disapproved = action === 'Disapprove';
         const nextStage = nextStageOf(currentStage);
         const nextStageKey = nextStage
-          ? NEXT_STAGE_KEY[currentStage]
+          ? DTR_NEXT_STAGE_KEY[currentStage]
           : 'AR-AP-STG-4';
         const nextStatus = disapproved
           ? 'disapproved'
@@ -606,7 +629,7 @@ export class ApprovalsService {
                   updated_at = NOW()
             WHERE id = $4`,
           [
-            disapproved ? 'AR-AP-STG-1' : nextStageKey,
+            disapproved ? 'DTR-AP-STG-1' : nextStageKey,
             nextStatus,
             remarkText,
             id,

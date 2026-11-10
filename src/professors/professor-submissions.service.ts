@@ -542,11 +542,11 @@ export class ProfessorSubmissionsService {
       `INSERT INTO dtr_submissions (
          professor_id, period_start, period_end, approval_stage, status,
          remarks, attachment_name, submitted_at, updated_at
-       ) VALUES ($1, $2::date, $3::date, 'AR-AP-STG-1', 'pending',
+       ) VALUES ($1, $2::date, $3::date, 'DTR-AP-STG-1', 'pending',
          'Submitted for Faculty Checker review.', $4, NOW(), NOW())
        ON CONFLICT (professor_id, period_start, period_end)
        DO UPDATE SET
-         approval_stage = 'AR-AP-STG-1',
+         approval_stage = 'DTR-AP-STG-1',
          status = 'pending',
          remarks = 'Submitted for Faculty Checker review.',
          attachment_name = EXCLUDED.attachment_name,

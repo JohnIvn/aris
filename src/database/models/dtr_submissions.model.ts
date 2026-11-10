@@ -7,7 +7,7 @@ export default async function createDtrSubmissionsModel(client: Pool) {
       professor_id UUID NOT NULL REFERENCES user_professors(id) ON DELETE CASCADE,
       period_start DATE NOT NULL,
       period_end DATE NOT NULL,
-      approval_stage VARCHAR NOT NULL DEFAULT 'AR-AP-STG-1',
+      approval_stage VARCHAR NOT NULL DEFAULT 'DTR-AP-STG-1',
       status VARCHAR NOT NULL DEFAULT 'pending',
       remarks TEXT,
       attachment_name VARCHAR,
@@ -22,5 +22,9 @@ export default async function createDtrSubmissionsModel(client: Pool) {
       dtr_id UUID NOT NULL REFERENCES dtr(id) ON DELETE CASCADE,
       PRIMARY KEY (submission_id, dtr_id)
     );
+
+    UPDATE dtr_submissions
+       SET approval_stage = REPLACE(approval_stage, 'AR-AP-STG-', 'DTR-AP-STG-')
+     WHERE approval_stage LIKE 'AR-AP-STG-%';
   `);
 }
