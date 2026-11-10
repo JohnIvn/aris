@@ -559,6 +559,7 @@ export class ReportsService {
             remarks: report.remarks,
             arTally,
             arEntries: arTally.entries,
+            entries: arTally.entries,
             dtrTally,
             dtrEntries,
             payroll_availability: report.payroll_availability,
