@@ -217,18 +217,11 @@ export class ApprovalsService {
           COALESCE(up.department, us.department, 'Academic Department') AS department,
           COALESCE(up.position, us.position, 'Professor') AS faculty_rank,
           COALESCE(up.email, us.email, 'faculty@aris.edu.ph') AS email,
-          sub.status AS submission_status,
-          sub.event AS submission_event,
-          sub.stage AS submission_stage
+          ar.submission_status,
+          ar.submission_event,
+          ar.current_stage AS submission_stage
         FROM accomplishment_reports ar
         LEFT JOIN approval_stages ast ON ast.stage_key = ar.approval_stage
-        LEFT JOIN LATERAL (
-          SELECT s.id, s.status, s.event, s.stage
-          FROM submissions s
-          WHERE s.report_id = ar.id
-          ORDER BY s.updated_at DESC
-          LIMIT 1
-        ) sub ON TRUE
         LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
         LEFT JOIN user_staffs us ON us.id = ar.user_id OR us.employee_id = ar.employee_id
         ORDER BY ar.updated_at DESC, ar.created_at DESC
@@ -699,19 +692,17 @@ export class ApprovalsService {
             [nextStageKey, remarkText, isAccountingApproval, id],
           );
 
-          // Keep submissions table in sync at every approval stage
-          const subRes = await this.client.query(
-            `UPDATE submissions
-                SET status = (CASE WHEN $1::boolean = TRUE THEN 'approved'::submission_status ELSE 'pending'::submission_status END),
-                    stage = $2,
+          await this.client.query(
+            `UPDATE accomplishment_reports
+                SET submission_status = (CASE WHEN $1::boolean = TRUE THEN 'approved' ELSE 'pending' END),
                     current_stage = $2,
+                    current_since = NOW(),
                     reviewed_by = $3,
                     reviewed_at = NOW(),
-                    remark = $4,
-                    event = $5,
+                    submission_notes = $4,
+                    submission_event = $5,
                     updated_at = NOW()
-              WHERE report_id = $6
-              RETURNING id`,
+              WHERE id = $6`,
             [
               isAccountingApproval,
               nextStageRole,
@@ -723,7 +714,6 @@ export class ApprovalsService {
               id,
             ],
           );
-          const subId = subRes.rows[0]?.id || null;
 
           if (isAccountingApproval) {
             // Automatically calculate payroll based on dynamic rates configuration
@@ -854,17 +844,16 @@ export class ApprovalsService {
             } else {
               const ins = await this.client.query(
                 `INSERT INTO payroll (
-                   user_id, professor_id, employee_id, report_id, submission_id,
+                   user_id, professor_id, employee_id, report_id,
                    type, period, units, hours, rate, salary, amount, status, date_received, metadata
                  ) VALUES (
-                   $1, $2, $3, $4, $5, 'AR', $6, $7, $8, $9, $10, $10, 'Approved', NOW(), $11
+                   $1, $2, $3, $4, 'AR', $5, $6, $7, $8, $9, $9, 'Approved', NOW(), $10
                  ) RETURNING id`,
                 [
                   arInfo.prof_id,
                   arInfo.prof_id,
                   arInfo.emp_id,
                   id,
-                  subId,
                   periodStr,
                   unitsStr,
                   totalHours,
@@ -912,16 +901,21 @@ export class ApprovalsService {
           );
 
           await this.client.query(
-            `UPDATE submissions
-                SET status = 'disapproved'::submission_status,
-                    remark = $1,
-                    event = $2,
+            `UPDATE accomplishment_reports
+                SET submission_status = 'disapproved',
+                    submission_notes = $1,
+                    submission_event = $2,
+                    reviewed_by = $4,
+                    reviewed_at = NOW(),
+                    current_stage = 'Faculty',
+                    current_since = NOW(),
                     updated_at = NOW()
-              WHERE report_id = $3`,
+              WHERE id = $3`,
             [
               remarkText,
               `AR returned for correction by ${role || currentStageRole}`,
               id,
+              user.id,
             ],
           );
 

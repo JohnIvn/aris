@@ -100,7 +100,6 @@ export class PayrollService {
         amount: number;
         status: string;
         report_id: string | null;
-        submission_id: string | null;
         created_at: Date;
       }>(
         `SELECT
@@ -116,7 +115,6 @@ export class PayrollService {
            COALESCE(p.salary, p.amount, 0)::numeric AS salary,
            COALESCE(p.status, 'Approved') AS status,
            p.report_id,
-           p.submission_id,
            p.created_at
          FROM payroll p
          LEFT JOIN user_professors up ON up.id = p.professor_id OR up.id = p.user_id OR up.employee_id = p.employee_id

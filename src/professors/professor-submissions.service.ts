@@ -172,7 +172,6 @@ export class ProfessorSubmissionsService {
       const period: string = data.period || 'Current Cycle';
       const units: string =
         data.units || (type === 'AR' ? '3 courses' : '22 days');
-      const dbStatus = toDbStatus(data.status);
       const event: string = data.event || `${type} submitted · ${period}`;
       const userEmail =
         user?.email ||
@@ -239,11 +238,13 @@ export class ProfessorSubmissionsService {
 
         if (!existingReportId && reference) {
           const subCheck = await this.client.query(
-            `SELECT report_id FROM submissions WHERE (reference = $1 OR payload->>'reference' = $1) AND report_id IS NOT NULL LIMIT 1`,
+            `SELECT id FROM accomplishment_reports
+              WHERE submission_reference = $1
+              LIMIT 1`,
             [reference],
           );
-          if (subCheck.rows.length > 0 && subCheck.rows[0].report_id) {
-            existingReportId = subCheck.rows[0].report_id;
+          if (subCheck.rows.length > 0 && subCheck.rows[0].id) {
+            existingReportId = subCheck.rows[0].id;
           }
         }
 
@@ -288,15 +289,36 @@ export class ProfessorSubmissionsService {
             `
             UPDATE accomplishment_reports
                SET approval_stage = 'AR-AP-STG-1',
+                   submission_status = 'pending',
+                   submission_reference = $2,
+                   submission_event = $3,
+                   submission_units = $4,
+                   submission_topics = $5,
+                   submission_notes = $6,
+                   submission_payload = $7::jsonb,
+                   submitted_at = NOW(),
+                   reviewed_by = NULL,
+                   reviewed_at = NULL,
+                   current_stage = 'Checker',
+                   current_since = NOW(),
                    remarks = $1,
                    payroll_availability = FALSE,
                    payroll_received = FALSE,
                    payroll_received_date = NULL,
                    updated_at = NOW()
-             WHERE id = $2
+             WHERE id = $8
              RETURNING id;
             `,
-            [resubmitRemark, existingReportId],
+            [
+              resubmitRemark,
+              reference,
+              event,
+              units,
+              topics,
+              notes,
+              JSON.stringify(recordPayload),
+              existingReportId,
+            ],
           );
           if (repRes.rows.length > 0) {
             reportId = repRes.rows[0].id;
@@ -325,6 +347,31 @@ export class ProfessorSubmissionsService {
             ],
           );
           reportId = repRes.rows[0]?.id || null;
+          if (reportId) {
+            await this.client.query(
+              `UPDATE accomplishment_reports
+                  SET submission_status = 'pending',
+                      submission_reference = $1,
+                      submission_event = $2,
+                      submission_units = $3,
+                      submission_topics = $4,
+                      submission_notes = $5,
+                      submission_payload = $6::jsonb,
+                      submitted_at = NOW(),
+                      current_stage = 'Checker',
+                      current_since = NOW()
+                WHERE id = $7`,
+              [
+                reference,
+                event,
+                units,
+                topics,
+                notes,
+                JSON.stringify(recordPayload),
+                reportId,
+              ],
+            );
+          }
         }
 
         if (reportId && Array.isArray(recordPayload.tables)) {
@@ -384,84 +431,6 @@ export class ProfessorSubmissionsService {
             }
           }
         }
-      }
-
-      // 2. Synchronize legacy submissions table (Update if exists, insert otherwise)
-      try {
-        const updateSubRes = await this.client.query(
-          `
-          UPDATE submissions
-             SET status = 'pending'::submission_status,
-                 payload = $1,
-                 event = $2,
-                 topics = $3,
-                 notes = $4,
-                 current_stage = 'Checker',
-                 current_since = NOW(),
-                 stage = 'Checker',
-                 reviewed_by = NULL,
-                 reviewed_at = NULL,
-                 remark = $5,
-                 report_id = COALESCE($6::uuid, submissions.report_id),
-                 updated_at = NOW()
-           WHERE reference = $7
-              OR ($6::uuid IS NOT NULL AND report_id = $6::uuid)
-           RETURNING *;
-          `,
-          [
-            JSON.stringify(recordPayload),
-            event.includes('resubmit')
-              ? event
-              : `AR resubmitted with corrections · ${period}`,
-            topics,
-            notes,
-            'Resubmitted with corrections. Queued for Faculty Checker review.',
-            reportId,
-            reference,
-          ],
-        );
-
-        if (updateSubRes.rows.length === 0) {
-          await this.client.query(
-            `
-            INSERT INTO submissions (
-              report_id, user_id, professor_id, user_email, role, reference, record_type,
-              period, units, status, event, payload, topics, notes, submitted_at, current_stage, current_since
-            ) VALUES (
-              $1, $2, $2, $3, 'professor', $4, $5,
-              $6, $7, $8, $9, $10, $11, $12, NOW(), 'Checker', NOW()
-            )
-            ON CONFLICT (reference) DO UPDATE SET
-              status = EXCLUDED.status,
-              payload = EXCLUDED.payload,
-              event = EXCLUDED.event,
-              report_id = COALESCE(EXCLUDED.report_id, submissions.report_id),
-              current_stage = 'Checker',
-              current_since = NOW(),
-              updated_at = NOW()
-            RETURNING *;
-            `,
-            [
-              reportId,
-              profId,
-              userEmail,
-              reference,
-              type,
-              period,
-              units,
-              dbStatus,
-              event,
-              JSON.stringify(recordPayload),
-              topics,
-              notes,
-            ],
-          );
-        }
-      } catch (subErr) {
-        console.warn(
-          '[ProfessorSubmissionsService] Submissions sync warning:',
-          subErr,
-        );
       }
 
       return SuccessHandler(
