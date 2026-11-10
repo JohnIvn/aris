@@ -472,17 +472,21 @@ export class ReportsService {
         `
       SELECT ar.*
       FROM accomplishment_reports ar
+      LEFT JOIN user_professors up
+        ON up.id = ar.user_id OR up.employee_id = ar.employee_id
       WHERE ar.user_id = $1
-         OR ar.user_id = (
-           SELECT up.id
-           FROM user_professors up
-           WHERE LOWER(up.email) = LOWER($2)
-           LIMIT 1
-         )
+         OR LOWER(up.email) = LOWER($2)
+         OR ar.employee_id = $3
       ORDER BY ar.updated_at DESC
-      LIMIT $3 OFFSET $4
+      LIMIT $4 OFFSET $5
       `,
-        [user.id, user_data.email, limit ?? 5, offset ?? 0],
+        [
+          user.id,
+          user_data.email,
+          user_data.employee_id,
+          limit ?? 5,
+          offset ?? 0,
+        ],
       );
 
       const reports = report_response.rows;
