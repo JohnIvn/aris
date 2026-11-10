@@ -537,8 +537,8 @@ export class ReportsService {
 
           const dtrEntries = await this.fetchDTREntries(
             user.id,
-            report.period_start,
-            report.period_end,
+            this.dateOnly(report.period_start),
+            this.dateOnly(report.period_end),
           );
 
           // Tally derived from the same rows the app displays, so they can't disagree.
@@ -552,6 +552,8 @@ export class ReportsService {
 
           return {
             id: report.id,
+            periodStart: report.period_start,
+            periodEnd: report.period_end,
             periodLabel,
             stage: report.approval_stage,
             updatedAt: report.updated_at,
@@ -736,6 +738,14 @@ export class ReportsService {
       total_hours: Number(row.total_hours ?? 0),
       status: this.dtrStatus(row.time_in, row.time_out),
     }));
+  }
+
+  private dateOnly(value: string | Date): string {
+    if (typeof value === 'string') return value.slice(0, 10);
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private dtrStatus(timeIn: string | null, timeOut: string | null): DtrStatus {
