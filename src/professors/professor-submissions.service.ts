@@ -503,6 +503,80 @@ export class ProfessorSubmissionsService {
     return this.createAccomplishmentReport(user, data);
   }
 
+  async createDtrSubmission(user: UserSession | undefined, data: any) {
+    if (!user?.id) {
+      return ErrorHandler('Authenticated professor is required', 401);
+    }
+
+    const periodStart = String(data.periodStart || '');
+    const periodEnd = String(data.periodEnd || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+      return ErrorHandler('DTR period must use YYYY-MM-DD dates', 400);
+    }
+
+    const professor = await this.client.query(
+      'SELECT id, firstname, lastname FROM user_professors WHERE id = $1 LIMIT 1',
+      [user.id],
+    );
+    if (professor.rows.length === 0) {
+      return ErrorHandler('Professor account was not found', 404);
+    }
+
+    const dtr = await this.client.query(
+      `SELECT id
+         FROM dtr
+        WHERE professor_id = $1
+          AND shift_date BETWEEN $2::date AND $3::date
+        ORDER BY shift_date ASC, time_in ASC`,
+      [user.id, periodStart, periodEnd],
+    );
+    if (dtr.rows.length === 0) {
+      return ErrorHandler('No DTR records exist for this period', 400);
+    }
+
+    const name = `${professor.rows[0].firstname || ''}${professor.rows[0].lastname || ''}`
+      .replace(/\s+/g, '');
+    const attachmentName = `DTR_${name || 'Faculty'}_Logged.xlsx`;
+    const result = await this.client.query(
+      `INSERT INTO dtr_submissions (
+         professor_id, period_start, period_end, approval_stage, status,
+         remarks, attachment_name, submitted_at, updated_at
+       ) VALUES ($1, $2::date, $3::date, 'AR-AP-STG-1', 'pending',
+         'Submitted for Faculty Checker review.', $4, NOW(), NOW())
+       ON CONFLICT (professor_id, period_start, period_end)
+       DO UPDATE SET
+         approval_stage = 'AR-AP-STG-1',
+         status = 'pending',
+         remarks = 'Submitted for Faculty Checker review.',
+         attachment_name = EXCLUDED.attachment_name,
+         submitted_at = NOW(),
+         updated_at = NOW()
+       RETURNING id, period_start, period_end, approval_stage, status,
+                 remarks, attachment_name, submitted_at`,
+      [user.id, periodStart, periodEnd, attachmentName],
+    );
+    const submission = result.rows[0];
+
+    await this.client.query(
+      'DELETE FROM dtr_submission_entries WHERE submission_id = $1',
+      [submission.id],
+    );
+    for (const row of dtr.rows) {
+      await this.client.query(
+        `INSERT INTO dtr_submission_entries (submission_id, dtr_id)
+         VALUES ($1, $2)`,
+        [submission.id, row.id],
+      );
+    }
+
+    return SuccessHandler('DTR submitted for review', 201, {
+      ...submission,
+      entryCount: dtr.rows.length,
+      type: 'DTR',
+    });
+  }
+
   async getSubmissions(
     user?: UserSession,
     emailQuery?: string,
