@@ -103,6 +103,16 @@ const NEXT_STAGE_KEY: Record<StageRole, string> = {
   Accounting: 'AR-AP-STG-4',
 };
 
+const STAGE_ROLES: StageRole[] = [
+  'Checker',
+  'Secretary',
+  'HR',
+  'Accounting',
+];
+
+const nextStageOf = (stage: StageRole): StageRole | undefined =>
+  STAGE_ROLES[STAGE_ROLES.indexOf(stage) + 1];
+
 @Injectable()
 export class ApprovalsService {
   constructor(
@@ -240,9 +250,20 @@ export class ApprovalsService {
         entriesByReport.set(entry.report_id, list);
       });
 
-      // 4. Fetch DTR entries
+      // 4. Fetch submitted DTR documents and linked attendance entries
       const dtrRes = await this.client.query(`
         SELECT
+          ds.id AS submission_id,
+          ds.period_start,
+          ds.period_end,
+          ds.approval_stage,
+          COALESCE(ast.label, ds.approval_stage) AS stage_label,
+          COALESCE(ast.stage_order, 1) AS stage_order,
+          ds.status AS submission_status,
+          ds.remarks,
+          ds.attachment_name,
+          ds.submitted_at,
+          ds.updated_at AS submission_updated_at,
           d.id,
           d.professor_id,
           d.shift_date,
@@ -253,9 +274,12 @@ export class ApprovalsService {
           COALESCE(up.firstname || ' ' || up.lastname, 'Faculty') AS professor_name,
           COALESCE(up.department, 'Academic Department') AS department,
           up.employee_id
-        FROM dtr d
+        FROM dtr_submissions ds
+        JOIN dtr_submission_entries dse ON dse.submission_id = ds.id
+        JOIN dtr d ON d.id = dse.dtr_id
+        LEFT JOIN approval_stages ast ON ast.stage_key = ds.approval_stage
         LEFT JOIN user_professors up ON up.id = d.professor_id
-        ORDER BY d.shift_date DESC, d.time_in DESC
+        ORDER BY ds.updated_at DESC, d.shift_date DESC, d.time_in DESC
       `);
 
       const items: ApprovalItem[] = [];
@@ -413,16 +437,16 @@ export class ApprovalsService {
         });
       }
 
-      // Process DTR entries grouped by Professor
-      const dtrByProf = new Map<string, any[]>();
+      // Process DTR submission documents
+      const dtrBySubmission = new Map<string, any[]>();
       dtrRes.rows.forEach((row) => {
-        const key = row.professor_id || 'unknown';
-        const list = dtrByProf.get(key) || [];
+        const key = row.submission_id;
+        const list = dtrBySubmission.get(key) || [];
         list.push(row);
-        dtrByProf.set(key, list);
+        dtrBySubmission.set(key, list);
       });
 
-      dtrByProf.forEach((logs, profId) => {
+      dtrBySubmission.forEach((logs, submissionId) => {
         if (!logs.length) return;
         const first = logs[0];
         const daysLogged = logs.length;
@@ -430,8 +454,8 @@ export class ApprovalsService {
           .reduce((acc, r) => acc + (Number(r.total_hours) || 0), 0)
           .toFixed(1);
 
-        const startDate = formatDate(logs[logs.length - 1]?.shift_date);
-        const endDate = formatDate(logs[0]?.shift_date);
+        const startDate = formatDate(first.period_start);
+        const endDate = formatDate(first.period_end);
         const periodStr = `${startDate} – ${endDate}`;
 
         const rows = logs
@@ -452,62 +476,56 @@ export class ApprovalsService {
           },
         ];
 
-        let stage: StageRole = 'HR';
+        const stage: StageRole =
+          STAGE_KEY_MAP[first.approval_stage] ||
+          STAGE_ORDER_MAP[Number(first.stage_order)] ||
+          'Checker';
         let status: StatusKind = 'Pending';
-        let action = 'DTR submitted';
+        let action = `DTR submitted · ${first.stage_label || stage}`;
 
-        if (daysLogged >= 20) {
-          stage = 'Accounting';
+        if (first.submission_status === 'disapproved' ||
+            first.submission_status === 'rejected') {
+          status = 'Disapproved';
+          action = 'DTR returned for correction';
+        } else if (first.submission_status === 'approved' || stage === 'Accounting') {
           status = 'Approved';
-          action = 'DTR approved by HR · Endorsed to Accounting';
-        } else if (daysLogged < 10) {
-          status = 'Flagged';
-          action = 'DTR flagged · Incomplete duty logs';
-        } else {
-          stage = 'HR';
-          status = 'Pending';
-          action = 'DTR submitted · Pending HR validation';
         }
 
-        const reviewer =
-          stage === 'Accounting'
-            ? 'Ana Bautista (HR)'
-            : 'HR Attendance Verification';
-        const submitted = `${endDate} · ${formatTime(first.created_at || new Date())}`;
+        const submitted = `${formatDate(first.submitted_at)} · ${formatTime(first.submitted_at)}`;
+        const reference = `DTR-${first.employee_id || 'P000'}-${submissionId
+          .slice(0, 8)
+          .toUpperCase()}`;
 
         items.push({
-          id: `dtr-${profId}`,
+          id: submissionId,
           faculty: first.professor_name || 'Faculty Member',
-          facultyNumber: first.employee_id || profId.slice(0, 4),
+          facultyNumber: first.employee_id || first.professor_id.slice(0, 4),
           type: 'DTR',
           period: periodStr,
-          reference: `DTR-2026-${(first.employee_id || profId.slice(0, 4)).toUpperCase()}`,
+          reference,
           submitted,
           stage,
           status,
           event: `${action} · ${daysLogged} days`,
           record: {
             period: periodStr,
-            reference: `DTR-2026-${(first.employee_id || profId.slice(0, 4)).toUpperCase()}`,
+            reference,
             facultyName: first.professor_name || 'Faculty Member',
             facultyNumber: first.employee_id || '—',
             college: first.department || 'Academic Department',
             tables,
             notes: `Total duty hours rendered: ${totalHours} hrs across ${daysLogged} working days.`,
-            attachment: `${(first.professor_name || 'Faculty').replace(/[^a-zA-Z]/g, '')}_DTR.xlsx · 84 KB`,
-            reviewer,
-            reviewedAt: `${endDate} · ${formatTime(first.created_at)}`,
-            remark:
-              daysLogged >= 20
-                ? 'Completed required duty hours for payroll endorsement.'
-                : 'Pending additional biometric shift reconciliation.',
+            attachment: first.attachment_name || `${(first.professor_name || 'Faculty').replace(/[^a-zA-Z]/g, '')}_DTR.xlsx`,
+            reviewer: first.stage_label || stage,
+            reviewedAt: `${formatDate(first.submitted_at)} · ${formatTime(first.submitted_at)}`,
+            remark: first.remarks || `Current Stage: ${stage}. Awaiting verification.`,
           },
         });
       });
 
       const scopedItems = staffRole
         ? items.filter((it) => it.stage === staffRole)
-        : items;
+        : [];
       return SuccessHandler('Approvals fetched successfully', 200, scopedItems);
     } catch (error) {
       if (error instanceof Error) {
@@ -529,6 +547,78 @@ export class ApprovalsService {
       const { id, action, remark, stage, role } = payload;
       if (!id) {
         return ErrorHandler('Missing approval item ID', 400);
+      }
+
+      const dtrSubmission = await this.client.query(
+        `SELECT id, approval_stage, status
+           FROM dtr_submissions
+          WHERE id = $1
+          LIMIT 1`,
+        [id],
+      );
+      if (dtrSubmission.rows.length > 0) {
+        let currentRole: StageRole | null = null;
+        if (user.role === 'staff') {
+          const staffRes = await this.client.query(
+            'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
+            [user.id],
+          );
+          const position = (staffRes.rows[0]?.position || user.position || '')
+            .trim()
+            .toLowerCase();
+          if (position.includes('check')) currentRole = 'Checker';
+          else if (position.includes('sec')) currentRole = 'Secretary';
+          else if (position.includes('hr') || position.includes('human'))
+            currentRole = 'HR';
+          else if (position.includes('account') || position.includes('payroll'))
+            currentRole = 'Accounting';
+        }
+
+        const currentStage =
+          STAGE_KEY_MAP[dtrSubmission.rows[0].approval_stage] || 'Checker';
+        if (!currentRole || currentRole !== currentStage) {
+          return ErrorHandler('You cannot decide this DTR at its current stage', 403);
+        }
+
+        const disapproved = action === 'Disapprove';
+        const nextStage = nextStageOf(currentStage);
+        const nextStageKey = nextStage
+          ? NEXT_STAGE_KEY[currentStage]
+          : 'AR-AP-STG-4';
+        const nextStatus = disapproved
+          ? 'disapproved'
+          : nextStage
+            ? 'pending'
+            : 'approved';
+        const remarkText =
+          remark ||
+          (disapproved
+            ? `DTR returned for correction by ${currentStage}.`
+            : nextStage
+              ? `Approved at ${currentStage} stage and forwarded to ${nextStage}.`
+              : 'Approved at the final stage and cleared for payroll.');
+
+        await this.client.query(
+          `UPDATE dtr_submissions
+              SET approval_stage = $1,
+                  status = $2,
+                  remarks = $3,
+                  updated_at = NOW()
+            WHERE id = $4`,
+          [
+            disapproved ? 'AR-AP-STG-1' : nextStageKey,
+            nextStatus,
+            remarkText,
+            id,
+          ],
+        );
+        return SuccessHandler('DTR decision saved successfully', 200, {
+          id,
+          action,
+          remark: remarkText,
+          stage: disapproved ? 'Checker' : nextStage || currentStage,
+          status: nextStatus,
+        });
       }
 
       // Check if it's an Accomplishment Report (UUID)
