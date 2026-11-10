@@ -470,13 +470,19 @@ export class ReportsService {
 
       const report_response = await this.db.query<ReportData>(
         `
-      SELECT *
-      FROM accomplishment_reports
-      WHERE user_id = $1
-      ORDER BY updated_at DESC
-      LIMIT $2 OFFSET $3
+      SELECT ar.*
+      FROM accomplishment_reports ar
+      WHERE ar.user_id = $1
+         OR ar.user_id = (
+           SELECT up.id
+           FROM user_professors up
+           WHERE LOWER(up.email) = LOWER($2)
+           LIMIT 1
+         )
+      ORDER BY ar.updated_at DESC
+      LIMIT $3 OFFSET $4
       `,
-        [user.id, limit ?? 5, offset ?? 0],
+        [user.id, user_data.email, limit ?? 5, offset ?? 0],
       );
 
       const reports = report_response.rows;
@@ -552,6 +558,7 @@ export class ReportsService {
             faculty_no: report.faculty_no,
             remarks: report.remarks,
             arTally,
+            arEntries: arTally.entries,
             dtrTally,
             dtrEntries,
             payroll_availability: report.payroll_availability,
