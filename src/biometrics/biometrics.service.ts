@@ -366,7 +366,7 @@ export class BiometricsService {
   ): Promise<PunchResult> {
     const ins = await this.db.query<DtrRow>(
       `INSERT INTO dtr (professor_id, staff_id, authenticator_tag, time_in, shift_date, on_site)
-       VALUES ($1, $2, $3, $4, ${NOW_TIME}, ${TODAY}, FALSE)
+       VALUES ($1, $2, $3, ${NOW_TIME}, ${TODAY}, FALSE)
        RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
       [owner.professorId, owner.staffId, authenticatorTag],
     );
