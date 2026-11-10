@@ -85,14 +85,15 @@ export class OAuthService {
   async verifyGoogleToken(idToken: string): Promise<GoogleProfile | null> {
     const webClientId = process.env.WEB_GOOGLE_CLIENT_ID;
     const androidClientId = process.env.ANDROID_GOOGLE_CLIENT_ID;
+    const iosClientId = process.env.IOS_GOOGLE_CLIENT_ID;
 
     if (!webClientId) {
       throw new Error('WEB_GOOGLE_CLIENT_ID is not configured');
     }
 
-    // Accept tokens issued for the web client (serverClientId) or the Android
-    // client directly — both are valid when signing in from the mobile app.
-    const audience = [webClientId, androidClientId].filter(
+    // Accept tokens issued for the web, Android, or iOS client — all are valid
+    // depending on platform and how Google issues the token on the device.
+    const audience = [webClientId, androidClientId, iosClientId].filter(
       (id): id is string => !!id,
     );
 
