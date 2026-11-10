@@ -83,11 +83,18 @@ export class OAuthService {
    * platform. Returns null if the token is invalid or the email is unverified.
    */
   async verifyGoogleToken(idToken: string): Promise<GoogleProfile | null> {
-    const audience = process.env.WEB_GOOGLE_CLIENT_ID;
+    const webClientId = process.env.WEB_GOOGLE_CLIENT_ID;
+    const androidClientId = process.env.ANDROID_GOOGLE_CLIENT_ID;
 
-    if (!audience) {
+    if (!webClientId) {
       throw new Error('WEB_GOOGLE_CLIENT_ID is not configured');
     }
+
+    // Accept tokens issued for the web client (serverClientId) or the Android
+    // client directly — both are valid when signing in from the mobile app.
+    const audience = [webClientId, androidClientId].filter(
+      (id): id is string => !!id,
+    );
 
     try {
       const ticket = await this.googleClient.verifyIdToken({
