@@ -489,7 +489,7 @@ export class ReportsService {
         )
           AND period_start <= ar.period_end::date
           AND period_end >= ar.period_start::date
-        ORDER BY updated_at DESC
+        ORDER BY dtr_submissions.updated_at DESC
         LIMIT 1
       ) ds ON TRUE
       WHERE ar.user_id = $1
