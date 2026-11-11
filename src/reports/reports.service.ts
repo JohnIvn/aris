@@ -480,8 +480,8 @@ export class ReportsService {
         SELECT approval_stage, status
         FROM dtr_submissions
         WHERE professor_id = ar.user_id
-          AND period_start = ar.period_start
-          AND period_end = ar.period_end
+          AND period_start <= ar.period_end::date
+          AND period_end >= ar.period_start::date
         ORDER BY updated_at DESC
         LIMIT 1
       ) ds ON TRUE
