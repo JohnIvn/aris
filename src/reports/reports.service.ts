@@ -471,27 +471,9 @@ export class ReportsService {
       const report_response = await this.db.query<ReportData>(
         `
       SELECT ar.*
-        ,ds.approval_stage AS dtr_approval_stage
-        ,ds.status AS dtr_status
       FROM accomplishment_reports ar
       LEFT JOIN user_professors up
         ON up.id = ar.user_id OR up.employee_id = ar.employee_id
-      LEFT JOIN LATERAL (
-        SELECT approval_stage, status
-        FROM dtr_submissions
-        LEFT JOIN user_professors dtr_professor
-          ON dtr_professor.id = dtr_submissions.professor_id
-        WHERE (
-          dtr_submissions.professor_id = $1
-          OR dtr_submissions.professor_id = ar.user_id
-          OR dtr_professor.employee_id = ar.employee_id
-          OR LOWER(dtr_professor.email) = LOWER(up.email)
-        )
-          AND period_start <= ar.period_end::date
-          AND period_end >= ar.period_start::date
-        ORDER BY dtr_submissions.updated_at DESC
-        LIMIT 1
-      ) ds ON TRUE
       WHERE ar.user_id = $1
          OR LOWER(up.email) = LOWER($2)
          OR ar.employee_id = $3
@@ -508,6 +490,24 @@ export class ReportsService {
       );
 
       const reports = report_response.rows;
+      const dtrSubmissions = await this.db.query<{
+        period_start: string;
+        period_end: string;
+        approval_stage: string;
+        status: string;
+        updated_at: string;
+      }>(
+        `
+        SELECT ds.period_start, ds.period_end, ds.approval_stage, ds.status, ds.updated_at
+        FROM dtr_submissions ds
+        LEFT JOIN user_professors dp ON dp.id = ds.professor_id
+        WHERE ds.professor_id = $1
+           OR dp.employee_id = $2
+           OR LOWER(dp.email) = LOWER($3)
+        ORDER BY ds.updated_at DESC
+        `,
+        [user.id, user_data.employee_id, user_data.email],
+      );
 
       // One query for all entries of the fetched reports, grouped by report_id
       const entriesByReport = new Map<string, ReportEntryData[]>();
@@ -542,6 +542,11 @@ export class ReportsService {
         reports.map(async (report) => {
           const periodStart = new Date(report.period_start);
           const periodEnd = new Date(report.period_end);
+          const dtrSubmission = dtrSubmissions.rows.find((submission) => {
+            const dtrStart = new Date(submission.period_start);
+            const dtrEnd = new Date(submission.period_end);
+            return dtrStart <= periodEnd && dtrEnd >= periodStart;
+          });
 
           const periodLabel =
             `${periodStart.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' })} ` +
@@ -574,6 +579,8 @@ export class ReportsService {
             periodEnd: report.period_end,
             periodLabel,
             stage: report.approval_stage,
+            dtr_approval_stage: dtrSubmission?.approval_stage ?? null,
+            dtr_status: dtrSubmission?.status ?? null,
             updatedAt: report.updated_at,
             professorName,
             professorId: user_data.employee_id,
