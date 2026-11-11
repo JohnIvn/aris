@@ -106,13 +106,13 @@ export class DatabaseService implements OnModuleInit {
       await createUserLogs(this.pool);
       await createAdminLogs(this.pool);
       await createSessions(this.pool);
+      await createApprovalStages(this.pool);
       await createReports(this.pool);
       await createReportEntries(this.pool);
       await createPayrollLogs(this.pool);
       await createPayrollModel(this.pool);
       await createSystemSettings(this.pool);
       await createLoginAttempts(this.pool);
-      await createApprovalStages(this.pool);
       await createAnnouncements(this.pool);
       await createSystemLogs(this.pool);
       await createSupportChannels(this.pool);
