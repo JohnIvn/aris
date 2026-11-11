@@ -479,7 +479,7 @@ export class ReportsService {
       LEFT JOIN LATERAL (
         SELECT approval_stage, status
         FROM dtr_submissions
-        WHERE professor_id = ar.user_id
+        WHERE professor_id = $1
           AND period_start <= ar.period_end::date
           AND period_end >= ar.period_start::date
         ORDER BY updated_at DESC
