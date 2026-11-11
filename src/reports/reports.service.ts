@@ -471,9 +471,20 @@ export class ReportsService {
       const report_response = await this.db.query<ReportData>(
         `
       SELECT ar.*
+        ,ds.approval_stage AS dtr_approval_stage
+        ,ds.status AS dtr_status
       FROM accomplishment_reports ar
       LEFT JOIN user_professors up
         ON up.id = ar.user_id OR up.employee_id = ar.employee_id
+      LEFT JOIN LATERAL (
+        SELECT approval_stage, status
+        FROM dtr_submissions
+        WHERE professor_id = ar.user_id
+          AND period_start = ar.period_start
+          AND period_end = ar.period_end
+        ORDER BY updated_at DESC
+        LIMIT 1
+      ) ds ON TRUE
       WHERE ar.user_id = $1
          OR LOWER(up.email) = LOWER($2)
          OR ar.employee_id = $3
