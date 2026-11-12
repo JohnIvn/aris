@@ -142,20 +142,27 @@ export class OAuthService {
         });
         return ErrorHandler('Invalid Google token', 401, []);
       }
-
       const found = await this.db.query<OAuthUser>(
         `
         SELECT 'staff' AS role, ${USER_COLUMNS}
-          FROM ${USER_ROLE_TABLES.staff} WHERE LOWER(email) = $1
+        FROM ${USER_ROLE_TABLES.staff}
+        WHERE LOWER(email) = $1
+
         UNION ALL
+
         SELECT 'professor' AS role, ${USER_COLUMNS}
-          FROM ${USER_ROLE_TABLES.professor} WHERE LOWER(email) = $1
-        LIMIT 1;
+        FROM ${USER_ROLE_TABLES.professor}
+        WHERE LOWER(email) = $1
+
+        UNION ALL
+
         SELECT 'admin' AS role, ${USER_COLUMNS}
-          FROM ${USER_ROLE_TABLES.admin} WHERE LOWER(email) = $1
+        FROM ${USER_ROLE_TABLES.admin}
+        WHERE LOWER(email) = $1
+
         LIMIT 1;
-        `,
-        [profile.email],
+      `,
+        [profile.email.toLowerCase()],
       );
 
       let user: OAuthUser | undefined = found.rows[0];
