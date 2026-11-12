@@ -19,7 +19,6 @@ import {
   PunchDto,
 } from './dto/enroll-biometric.dto';
 import { SuccessHandler } from '../lib/utils/handlers';
-import { TransactionsDto } from './dto/biometrics-transactions.dto';
 
 interface AuthedRequest {
   user: { id: string; role: string };
@@ -77,10 +76,5 @@ export class BiometricsController {
       }
       throw e;
     }
-  }
-
-  @Post('transactions')
-  async recordTransactions(@Body() body: TransactionsDto) {
-    return this.biometricsService.recordTransactions(body);
   }
 }
