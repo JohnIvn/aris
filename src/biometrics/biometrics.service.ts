@@ -33,8 +33,7 @@ export interface EnrolledBiometricRecord {
   avatar_url: string | null;
 }
 
-export type PunchAction =
-  'time_in' | 'time_out' | 'duplicate' | 'already_completed';
+export type PunchAction = 'time_in' | 'time_out' | 'duplicate';
 
 export class BiometricsError extends Error {
   constructor(
@@ -74,7 +73,6 @@ const TZ = 'Asia/Manila';
 const TODAY = `(NOW() AT TIME ZONE '${TZ}')::date`;
 const NOW_TIME = `(NOW() AT TIME ZONE '${TZ}')::time(0)`;
 const DEBOUNCE_SECONDS = 60; // ignore a second scan right after a punch
-const OPEN_WINDOW_HOURS = 24; // an open row older than this is treated as a missed time out
 const TAG_RE = /^auth-\d{5,}$/; // matches the authenticators.tag default, e.g. auth-00001
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -297,12 +295,13 @@ export class BiometricsService {
   // ───────────────────────── Attendance ─────────────────────────
 
   /**
-   * One dtr row per day (time_in + time_out on the same row). on_site is always false.
+   * Multiple dtr rows per day are allowed (one row per time_in/time_out pair, hours computed per row).
+   * Based on the user's latest row:
    *   scan within DEBOUNCE_SECONDS of the last write -> duplicate
-   *   open row (time_in, no time_out) within OPEN_WINDOW_HOURS -> time out
-   *   today's row already closed -> already_completed
-   *   otherwise -> time in
-   * A missed time out from a previous day stays time_out NULL and never blocks today.
+   *   open row (time_in, no time_out) from today -> time out
+   *   otherwise -> time in (new row)
+   * No night shifts: an open row from a previous day is a missed time out. It stays time_out NULL
+   * (flagged by getDtrRecords) and never blocks or gets closed by a later scan.
    */
   async punch(userId: string, authenticatorTag: string): Promise<PunchResult> {
     if (typeof userId !== 'string' || !UUID_RE.test(userId)) {
@@ -345,13 +344,11 @@ export class BiometricsService {
       DtrRow & {
         admin_id: string | null;
         too_soon: boolean;
-        within_window: boolean;
         is_today: boolean;
       }
     >(
       `SELECT id, admin_id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text,
               (updated_at > NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds') AS too_soon,
-              (created_at > NOW() - INTERVAL '${OPEN_WINDOW_HOURS} hours') AS within_window,
               (shift_date = ${TODAY}) AS is_today
        FROM dtr
        WHERE professor_id IS NOT DISTINCT FROM $1::uuid
@@ -362,11 +359,8 @@ export class BiometricsService {
     const row = rows[0];
 
     if (row?.too_soon) return this.toResult('duplicate', row, owner);
-    if (row?.time_in && !row.time_out && row.within_window) {
+    if (row?.time_in && !row.time_out && row.is_today) {
       return this.timeOut(row.id, owner);
-    }
-    if (row?.is_today && row.time_out) {
-      return this.toResult('already_completed', row, owner);
     }
     return this.timeIn(owner, authenticatorTag);
   }
