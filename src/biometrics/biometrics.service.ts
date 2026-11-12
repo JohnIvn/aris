@@ -9,6 +9,7 @@ import {
   EnrollBiometricDto,
 } from './dto/enroll-biometric.dto';
 import { UserRoles } from '../lib/data/types';
+import { TransactionsDto } from './dto/biometrics-transactions.dto';
 
 export interface EnrolledBiometricRecord {
   id: string;
@@ -541,6 +542,80 @@ export class BiometricsService {
       return SuccessHandler('Biometric record deleted successfully', 200, {
         id,
       });
+    } catch (error) {
+      return this.toError(error);
+    }
+  }
+
+  // ZKTeco Transactions
+  async recordTransactions(transactionDto: TransactionsDto) {
+    try {
+      const result = await this.db.query(
+        `
+      INSERT INTO attendance_transactions (
+        id,
+        emp,
+        emp_code,
+        first_name,
+        last_name,
+        department,
+        position,
+        punch_time,
+        punch_state,
+        punch_state_display,
+        verify_type,
+        verify_type_display,
+        work_code,
+        gps_location,
+        area_alias,
+        terminal_sn,
+        temperature,
+        is_mask,
+        terminal_alias,
+        upload_time,
+        longitude,
+        latitude
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+        $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+      )
+      ON CONFLICT (id) DO NOTHING
+      RETURNING *
+      `,
+        [
+          transactionDto.id,
+          transactionDto.emp,
+          transactionDto.emp_code,
+          transactionDto.first_name,
+          transactionDto.last_name,
+          transactionDto.department,
+          transactionDto.position,
+          transactionDto.punch_time,
+          transactionDto.punch_state,
+          transactionDto.punch_state_display,
+          transactionDto.verify_type,
+          transactionDto.verify_type_display,
+          transactionDto.work_code,
+          transactionDto.gps_location,
+          transactionDto.area_alias,
+          transactionDto.terminal_sn,
+          transactionDto.temperature,
+          transactionDto.is_mask,
+          transactionDto.terminal_alias,
+          transactionDto.upload_time,
+          transactionDto.longitude,
+          transactionDto.latitude,
+        ],
+      );
+
+      return {
+        success: true,
+        message: result.rowCount
+          ? 'Transaction recorded successfully.'
+          : 'Transaction already exists.',
+        data: result.rows[0] ?? null,
+      };
     } catch (error) {
       return this.toError(error);
     }
