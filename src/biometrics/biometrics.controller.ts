@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -76,5 +77,22 @@ export class BiometricsController {
       }
       throw e;
     }
+  }
+
+  @Get('transactions')
+  async getBiometricsTransactions(
+    @Query('page') page = '1',
+    @Query('limit') limit = '50',
+    @Query('emp_code') empCode?: string,
+    @Query('start_date') startDate?: string,
+    @Query('end_date') endDate?: string,
+  ) {
+    return this.biometricsService.getBiometricsTransactions(
+      Math.max(1, Number(page) || 1),
+      Math.min(100, Math.max(1, Number(limit) || 50)),
+      empCode,
+      startDate,
+      endDate,
+    );
   }
 }

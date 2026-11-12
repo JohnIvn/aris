@@ -561,6 +561,79 @@ export class BiometricsService {
   }
 
   // ZKTeco Transactions
+  async getBiometricsTransactions(
+    page = 1,
+    limit = 50,
+    empCode?: string,
+    startDate?: string,
+    endDate?: string,
+  ) {
+    try {
+      const offset = (page - 1) * limit;
+
+      const conditions: string[] = [];
+      const values: any[] = [];
+
+      if (empCode) {
+        values.push(empCode);
+        conditions.push(`emp_code = $${values.length}`);
+      }
+
+      if (startDate) {
+        values.push(startDate);
+        conditions.push(`punch_time >= $${values.length}`);
+      }
+
+      if (endDate) {
+        values.push(endDate);
+        conditions.push(`punch_time <= $${values.length}`);
+      }
+
+      const whereClause = conditions.length
+        ? `WHERE ${conditions.join(' AND ')}`
+        : '';
+
+      const countResult = await this.db.query(
+        `
+      SELECT COUNT(*)::INTEGER AS total
+      FROM attendance_transactions
+      ${whereClause}
+      `,
+        values,
+      );
+
+      values.push(limit);
+      values.push(offset);
+
+      const result = await this.db.query(
+        `
+      SELECT *
+      FROM attendance_transactions
+      ${whereClause}
+      ORDER BY punch_time DESC
+      LIMIT $${values.length - 1}
+      OFFSET $${values.length}
+      `,
+        values,
+      );
+
+      const total = countResult.rows[0].total;
+
+      return {
+        success: true,
+        message: 'Biometric transactions retrieved successfully.',
+        data: result.rows,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      return this.toError(error);
+    }
+  }
   async recordTransactions(transactionDto: TransactionsDto) {
     try {
       const result = await this.db.query(
