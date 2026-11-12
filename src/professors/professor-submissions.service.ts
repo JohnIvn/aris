@@ -479,8 +479,10 @@ export class ProfessorSubmissionsService {
 
     const periodStart = String(data.periodStart || '');
     const periodEnd = String(data.periodEnd || '');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(periodStart) ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(periodStart) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)
+    ) {
       return ErrorHandler('DTR period must use YYYY-MM-DD dates', 400);
     }
 
@@ -504,8 +506,11 @@ export class ProfessorSubmissionsService {
       return ErrorHandler('No DTR records exist for this period', 400);
     }
 
-    const name = `${professor.rows[0].firstname || ''}${professor.rows[0].lastname || ''}`
-      .replace(/\s+/g, '');
+    const name =
+      `${professor.rows[0].firstname || ''}${professor.rows[0].lastname || ''}`.replace(
+        /\s+/g,
+        '',
+      );
     const attachmentName = `DTR_${name || 'Faculty'}_Logged.xlsx`;
     const result = await this.client.query(
       `INSERT INTO dtr_submissions (
