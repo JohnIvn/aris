@@ -17,6 +17,11 @@ export class OTAController {
     return this.service.listFiles();
   }
 
+  @Get('main')
+  getMainFile() {
+    return this.service.getMainFile();
+  }
+
   @Post('files')
   async uploadFile(
     @CurrentUser() user: UserSession,

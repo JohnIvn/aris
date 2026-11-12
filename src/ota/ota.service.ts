@@ -78,6 +78,35 @@ export class OTAService {
 
   }
 
+  async getMainFile() {
+    try {
+      const mainFileResult = await this.db.query<{ setting_value: string }>(
+        `SELECT setting_value FROM system_settings
+         WHERE setting_key = 'ota_main_file' LIMIT 1`,
+      );
+      const mainFile = mainFileResult.rows[0]?.setting_value;
+      if (!mainFile) {
+        return this.invalid('No main OTA file has been designated', 404);
+      }
+
+      const supabase = this.getSupabase();
+      await this.ensureBucket(supabase);
+      const { data, error } = await supabase.storage
+        .from(OTA_BUCKET)
+        .download(mainFile);
+      if (error) throw new Error(`Unable to download main OTA file: ${error.message}`);
+
+      const content = Buffer.from(await data.arrayBuffer()).toString('base64');
+      return { name: mainFile, content };
+    } catch (error) {
+      this.logger.error(error);
+      return this.invalid(
+        error instanceof Error ? error.message : 'Unable to download main OTA file',
+        500,
+      );
+    }
+  }
+
   async setMainFile(user: UserSession, name: string | undefined) {
       try {
         if (!name || name.includes('/') || name.includes('\\')) {
