@@ -151,6 +151,9 @@ export class OAuthService {
         SELECT 'professor' AS role, ${USER_COLUMNS}
           FROM ${USER_ROLE_TABLES.professor} WHERE LOWER(email) = $1
         LIMIT 1;
+        SELECT 'admin' AS role, ${USER_COLUMNS}
+          FROM ${USER_ROLE_TABLES.admin} WHERE LOWER(email) = $1
+        LIMIT 1;
         `,
         [profile.email],
       );
