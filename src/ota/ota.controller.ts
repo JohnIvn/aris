@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CurrentUser } from '../lib/decorators/cookie-decorator';
 import type { UserSession } from '../lib/data/interfaces';
@@ -25,5 +25,13 @@ export class OTAController {
     const file = await request.file();
     if (!file) return this.service.invalid('A PowerShell file is required');
     return this.service.uploadFile(user, file);
+  }
+
+  @Post('main')
+  setMainFile(
+    @CurrentUser() user: UserSession,
+    @Body() data: { name?: string },
+  ) {
+    return this.service.setMainFile(user, data.name);
   }
 }
