@@ -23,6 +23,7 @@ export interface EnrolledBiometricRecord {
   updated_at: string;
   professor_id: string | null;
   staff_id: string | null;
+  admin_id: string | null;
   user_type: UserRoles;
   employee_id: string;
   name: string;
@@ -48,6 +49,7 @@ interface Owner {
   biometricsRowId: string;
   professorId: string | null;
   staffId: string | null;
+  adminId: string | null;
 }
 
 export interface PunchResult {
@@ -60,6 +62,7 @@ export interface PunchResult {
   onSite: boolean;
   professorId: string | null;
   staffId: string | null;
+  adminId: string | null;
 }
 
 export interface DtrUser {
@@ -316,8 +319,9 @@ export class BiometricsService {
       id: string;
       professor_id: string | null;
       staff_id: string | null;
+      admin_id: string | null;
     }>(
-      `SELECT id, professor_id, staff_id FROM dtr_biometrics
+      `SELECT id, professor_id, staff_id, admin_id FROM dtr_biometrics
        WHERE authenticator_tag = $2
          AND authenticator_fingerprint IS NOT NULL
          AND (professor_id = $1 OR staff_id = $1)
@@ -334,12 +338,18 @@ export class BiometricsService {
       biometricsRowId: ownerRes.rows[0].id,
       professorId: ownerRes.rows[0].professor_id,
       staffId: ownerRes.rows[0].staff_id,
+      adminId: ownerRes.rows[0].admin_id,
     };
 
     const { rows } = await this.db.query<
-      DtrRow & { too_soon: boolean; within_window: boolean; is_today: boolean }
+      DtrRow & {
+        admin_id: string | null;
+        too_soon: boolean;
+        within_window: boolean;
+        is_today: boolean;
+      }
     >(
-      `SELECT id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text,
+      `SELECT id, admin_id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text,
               (updated_at > NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds') AS too_soon,
               (created_at > NOW() - INTERVAL '${OPEN_WINDOW_HOURS} hours') AS within_window,
               (shift_date = ${TODAY}) AS is_today
@@ -398,6 +408,7 @@ export class BiometricsService {
       onSite: r.on_site,
       professorId: owner.professorId,
       staffId: owner.staffId,
+      adminId: owner.adminId,
     };
   }
 
@@ -406,7 +417,7 @@ export class BiometricsService {
     try {
       const isAdmin = user.role === 'administrator';
       const { rows } = await this.db.query(
-        `SELECT d.id, d.professor_id, d.staff_id, d.authenticator_tag,
+        `SELECT d.id, d.professor_id, d.staff_id, d.admin_id, d.authenticator_tag,
                 d.time_in::text, d.time_out::text, d.total_hours::text,
                 d.shift_date::text, d.on_site, d.created_at, d.updated_at,
                 COALESCE(p.employee_id, s.employee_id) AS employee_id,
@@ -443,6 +454,7 @@ export class BiometricsService {
           b.updated_at,
           b.professor_id,
           b.staff_id,
+          b.admin_id,
           p.employee_id AS prof_employee_id,
           p.firstname AS prof_firstname,
           p.lastname AS prof_lastname,
@@ -479,6 +491,7 @@ export class BiometricsService {
           updated_at: row.updated_at,
           professor_id: row.professor_id,
           staff_id: row.staff_id,
+          admin_id: row.admin_id,
           user_type: isProf ? 'professor' : 'staff',
           employee_id: isProf
             ? row.prof_employee_id || ''
@@ -518,7 +531,7 @@ export class BiometricsService {
   async deleteBiometric(id: string) {
     try {
       const existing = await this.db.query(
-        `SELECT id, authenticator_tag, authenticator_fingerprint FROM dtr_biometrics WHERE id = $1`,
+        `SELECT id, admin_id, authenticator_tag, authenticator_fingerprint FROM dtr_biometrics WHERE id = $1`,
         [id],
       );
       if (existing.rows.length === 0) {
