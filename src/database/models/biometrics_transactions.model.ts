@@ -2,7 +2,7 @@ import { Pool } from 'pg';
 
 export default async function createBiometricsTransactions(client: Pool) {
   await client.query(`
-    CREATE TABLE attendance_transactions (
+    CREATE TABLE IF NOT EXISTS attendance_transactions (
         id BIGINT PRIMARY KEY,
         emp BIGINT,
         emp_code VARCHAR(50),
@@ -36,18 +36,18 @@ export default async function createBiometricsTransactions(client: Pool) {
     );`);
 
   await client.query(`
-    CREATE INDEX idx_attendance_emp
+    CREATE INDEX IF NOT EXISTS idx_attendance_emp
         ON attendance_transactions (emp);`);
 
   await client.query(`
-    CREATE INDEX idx_attendance_emp_code
+    CREATE INDEX IF NOT EXISTS idx_attendance_emp_code
         ON attendance_transactions (emp_code);`);
 
   await client.query(`
-    CREATE INDEX idx_attendance_punch_time
+    CREATE INDEX IF NOT EXISTS idx_attendance_punch_time
         ON attendance_transactions (punch_time);`);
 
   await client.query(`
-    CREATE INDEX idx_attendance_terminal_sn
+    CREATE INDEX IF NOT EXISTS idx_attendance_terminal_sn
         ON attendance_transactions (terminal_sn);`);
 }
