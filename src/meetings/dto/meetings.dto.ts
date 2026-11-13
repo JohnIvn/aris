@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean } from 'class-validator';
 
 export class SaveMeetingDto {
   @IsOptional()
@@ -91,4 +91,7 @@ export class SaveMeetingDto {
 
   @IsOptional()
   metadata?: Record<string, unknown>;
+
+  @IsOptional() @IsBoolean() auth_in?: boolean;
+  @IsOptional() @IsBoolean() auth_out?: boolean;
 }

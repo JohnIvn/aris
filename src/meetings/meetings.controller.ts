@@ -6,6 +6,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -53,6 +54,11 @@ export class MeetingsController {
     @Body() dto: SaveMeetingDto,
   ) {
     return this.meetingsService.saveMeeting(user, dto);
+  }
+
+  @Patch(':id/auth-out')
+  async setAuthOut(@CurrentUser() user: UserSession, @Param('id') id: string) {
+    return this.meetingsService.setAuthOut(user, id);
   }
 
   @Delete(':id')

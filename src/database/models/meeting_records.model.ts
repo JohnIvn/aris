@@ -47,5 +47,7 @@ export async function createMeetingRecords(client: Pool) {
     ALTER TABLE meeting_records ADD COLUMN IF NOT EXISTS action_items JSONB DEFAULT '[]'::jsonb;
     ALTER TABLE meeting_records ADD COLUMN IF NOT EXISTS transcript JSONB DEFAULT '[]'::jsonb;
     ALTER TABLE meeting_records ADD COLUMN IF NOT EXISTS participants JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE meeting_records ADD COLUMN IF NOT EXISTS auth_in boolean DEFAULT false;
+    ALTER TABLE meeting_records ADD COLUMN IF NOT EXISTS auth_out boolean DEFAULT false;
   `);
 }

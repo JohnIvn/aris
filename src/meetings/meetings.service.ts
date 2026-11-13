@@ -122,12 +122,15 @@ export class MeetingsService {
         (transcriptSource
           ? transcriptSource.split(/\s+/).filter(Boolean).length
           : 0);
+      const authIn = dto.auth_in === true;
+      const authOut = dto.auth_out === true;
 
       console.log(
         `\n================== [ARIS BACKEND TERMINAL] MEETING SAVED ==================`,
       );
       console.log(`Meeting Code: ${meetingCode}`);
       console.log(`Duration: ${durationMins}m (${durationSecs}s)`);
+      console.log(`Auth In: ${authIn} | Auth Out: ${authOut}`);
       console.log(
         `Transcript Lines Received: ${Array.isArray(dto.transcript) ? dto.transcript.length : 0}`,
       );
@@ -176,7 +179,9 @@ export class MeetingsService {
                       transcript_source = $2,
                       participants = COALESCE($3, participants),
                       word_count = $4,
-                      status = 'summarized'
+                      status = 'summarized',
+                      auth_in = auth_in OR $6,
+                      auth_out = auth_out OR $7
                 WHERE id = $5
             RETURNING *`,
               [
@@ -185,6 +190,8 @@ export class MeetingsService {
                 participantsJson,
                 wordCount,
                 recentCheck.rows[0].id,
+                authIn,
+                authOut,
               ],
             );
             return SuccessHandler(
@@ -201,10 +208,7 @@ export class MeetingsService {
         }
       }
 
-      // Check if status is a valid meeting_status enum
-      let recordRow: Record<string, unknown> | null = null;
-      try {
-        const insertQuery = `
+      const insertQuery = `
           INSERT INTO meeting_records (
             professor_id,
             name,
@@ -223,33 +227,40 @@ export class MeetingsService {
             transcript,
             transcript_source,
             participants,
-            word_count
+            word_count,
+            auth_in,
+            auth_out
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
           )
           RETURNING *;
         `;
+      const buildParams = (st: string) => [
+        professorId,
+        name,
+        course,
+        meetingCode,
+        meetingUrl,
+        meetingDate,
+        startTime,
+        endTime,
+        startedAtDate,
+        endedAtDate,
+        durationMins,
+        durationSecs,
+        st,
+        info,
+        transcriptJson,
+        transcriptSource,
+        participantsJson,
+        wordCount,
+        authIn,
+        authOut,
+      ];
 
-        const res = await client.query(insertQuery, [
-          professorId,
-          name,
-          course,
-          meetingCode,
-          meetingUrl,
-          meetingDate,
-          startTime,
-          endTime,
-          startedAtDate,
-          endedAtDate,
-          durationMins,
-          durationSecs,
-          status,
-          info,
-          transcriptJson,
-          transcriptSource,
-          participantsJson,
-          wordCount,
-        ]);
+      let recordRow: Record<string, unknown> | null = null;
+      try {
+        const res = await client.query(insertQuery, buildParams(status));
         recordRow = res.rows[0];
       } catch (err: unknown) {
         // Fallback in case status enum 'completed' is not accepted by older db enum definition
@@ -257,51 +268,8 @@ export class MeetingsService {
         if (errMsg.includes('meeting_status') || errMsg.includes('enum')) {
           status = 'summarized';
           const fallbackRes = await client.query(
-            `
-            INSERT INTO meeting_records (
-              professor_id,
-              name,
-              course,
-              meeting_code,
-              meeting_url,
-              meeting_date,
-              start_time,
-              end_time,
-              started_at,
-              ended_at,
-              duration_minutes,
-              duration_seconds,
-              status,
-              info,
-              transcript,
-              transcript_source,
-              participants,
-              word_count
-            ) VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
-            )
-            RETURNING *;
-          `,
-            [
-              professorId,
-              name,
-              course,
-              meetingCode,
-              meetingUrl,
-              meetingDate,
-              startTime,
-              endTime,
-              startedAtDate,
-              endedAtDate,
-              durationMins,
-              durationSecs,
-              status,
-              info,
-              transcriptJson,
-              transcriptSource,
-              participantsJson,
-              wordCount,
-            ],
+            insertQuery,
+            buildParams(status),
           );
           recordRow = fallbackRes.rows[0];
         } else {
@@ -340,6 +308,8 @@ export class MeetingsService {
                 duration_minutes: durationMins,
                 time_in: startedAtDate.toISOString(),
                 time_out: endedAtDate.toISOString(),
+                auth_in: authIn,
+                auth_out: authOut,
                 saved_by: user?.email || dto.user_email,
                 course,
               }),
@@ -351,6 +321,38 @@ export class MeetingsService {
       }
 
       return SuccessHandler('Meeting recorded successfully', 201, recordRow);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500, error.name)
+        : ErrorHandler('Server Error', 500, 'Unknown Error');
+    }
+  }
+
+  /** Fingerprint-verified time out. Only the owning professor, and only if auth_in was verified. */
+  async setAuthOut(user: UserSession, id: string) {
+    try {
+      const client = this.databaseService.getClient();
+      const professorId = await this.resolveProfessorId(user);
+      if (!professorId)
+        return ErrorHandler('Professor not found', 403, 'Forbidden');
+
+      const res = await client.query(
+        `UPDATE meeting_records
+            SET auth_out = true
+          WHERE id = $1
+            AND professor_id = $2
+            AND auth_in = true
+        RETURNING *`,
+        [id, professorId],
+      );
+      if (res.rows.length === 0) {
+        return ErrorHandler(
+          'Meeting not found, not yours, or time in was not verified',
+          404,
+          'NotFound',
+        );
+      }
+      return SuccessHandler('Time out verified', 200, res.rows[0]);
     } catch (error) {
       return error instanceof Error
         ? ErrorHandler(error.message, 500, error.name)
@@ -586,6 +588,8 @@ export class MeetingsService {
           meeting_code: row.meeting_code,
           meeting_url: row.meeting_url,
           created_at: row.created_at,
+          auth_in: row.auth_in === true,
+          auth_out: row.auth_out === true,
         };
       });
 
