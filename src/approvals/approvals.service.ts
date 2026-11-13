@@ -117,12 +117,7 @@ const DTR_NEXT_STAGE_KEY: Record<StageRole, string> = {
   Accounting: 'DTR-AP-STG-4',
 };
 
-const STAGE_ROLES: StageRole[] = [
-  'Checker',
-  'Secretary',
-  'HR',
-  'Accounting',
-];
+const STAGE_ROLES: StageRole[] = ['Checker', 'Secretary', 'HR', 'Accounting'];
 
 const nextStageOf = (stage: StageRole): StageRole | undefined =>
   STAGE_ROLES[STAGE_ROLES.indexOf(stage) + 1];
@@ -499,11 +494,16 @@ export class ApprovalsService {
         let status: StatusKind = 'Pending';
         let action = `DTR submitted · ${first.stage_label || stage}`;
 
-        if (first.submission_status === 'disapproved' ||
-            first.submission_status === 'rejected') {
+        if (
+          first.submission_status === 'disapproved' ||
+          first.submission_status === 'rejected'
+        ) {
           status = 'Disapproved';
           action = 'DTR returned for correction';
-        } else if (first.submission_status === 'approved' || stage === 'Accounting') {
+        } else if (
+          first.submission_status === 'approved' ||
+          stage === 'Accounting'
+        ) {
           status = 'Approved';
         }
 
@@ -531,10 +531,14 @@ export class ApprovalsService {
             college: first.department || 'Academic Department',
             tables,
             notes: `Total duty hours rendered: ${totalHours} hrs across ${daysLogged} working days.`,
-            attachment: first.attachment_name || `${(first.professor_name || 'Faculty').replace(/[^a-zA-Z]/g, '')}_DTR.xlsx`,
+            attachment:
+              first.attachment_name ||
+              `${(first.professor_name || 'Faculty').replace(/[^a-zA-Z]/g, '')}_DTR.xlsx`,
             reviewer: first.stage_label || stage,
             reviewedAt: `${formatDate(first.submitted_at)} · ${formatTime(first.submitted_at)}`,
-            remark: first.remarks || `Current Stage: ${stage}. Awaiting verification.`,
+            remark:
+              first.remarks ||
+              `Current Stage: ${stage}. Awaiting verification.`,
           },
         });
       });
@@ -593,7 +597,10 @@ export class ApprovalsService {
         const currentStage =
           DTR_STAGE_KEY_MAP[dtrSubmission.rows[0].approval_stage] || 'Checker';
         if (!currentRole || currentRole !== currentStage) {
-          return ErrorHandler('You cannot decide this DTR at its current stage', 403);
+          return ErrorHandler(
+            'You cannot decide this DTR at its current stage',
+            403,
+          );
         }
 
         const disapproved = action === 'Disapprove';

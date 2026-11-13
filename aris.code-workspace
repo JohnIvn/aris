@@ -14,6 +14,9 @@
 	},
 	{
 		"path": "../aris-mobile"
+	},
+	{
+		"path": "../aris-llm"
 	}
 ],
   "settings": {}

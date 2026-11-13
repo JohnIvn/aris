@@ -434,7 +434,9 @@ export class AuditService {
         ];
 
         const stageOrder = Number(first.stage_order) || 1;
-        const submissionStatus = String(first.submission_status || '').toLowerCase();
+        const submissionStatus = String(
+          first.submission_status || '',
+        ).toLowerCase();
         let result:
           | 'Submitted'
           | 'Approved'
@@ -444,7 +446,10 @@ export class AuditService {
           | 'Pending' = 'Pending';
         let action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
 
-        if (submissionStatus === 'rejected' || submissionStatus === 'disapproved') {
+        if (
+          submissionStatus === 'rejected' ||
+          submissionStatus === 'disapproved'
+        ) {
           result = 'Rejected';
           action = 'DTR rejected · Returned for correction';
         } else if (submissionStatus === 'approved' || stageOrder >= 4) {
@@ -481,7 +486,9 @@ export class AuditService {
             email: first.email,
             userId: first.professor_id,
             tables,
-            attachment: first.attachment_name || `DTR_${first.faculty_name.replace(/[^a-zA-Z]/g, '')}_Logged.xlsx`,
+            attachment:
+              first.attachment_name ||
+              `DTR_${first.faculty_name.replace(/[^a-zA-Z]/g, '')}_Logged.xlsx`,
             reviewer: first.stage_label || 'Faculty Checker',
             reviewedAt: `${formatDate(first.submitted_at || first.submission_updated_at || first.submission_created_at)} · ${formatTime(first.submitted_at || first.submission_updated_at || first.submission_created_at)}`,
             remark: first.remarks || 'Submitted for review.',

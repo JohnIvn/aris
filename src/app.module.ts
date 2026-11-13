@@ -23,6 +23,7 @@ import { SupportModule } from './support/support.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { ApprovalsModule } from './approvals/approvals.module';
 import { BiometricsModule } from './biometrics/biometrics.module';
+import { OTAModule } from './ota/ota.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BiometricsModule } from './biometrics/biometrics.module';
     CurriculumModule,
     ApprovalsModule,
     BiometricsModule,
+    OTAModule,
   ],
   controllers: [AppController],
   providers: [AppService],
