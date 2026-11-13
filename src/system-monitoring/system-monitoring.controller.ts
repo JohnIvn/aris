@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { exec } from 'child_process';
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
 import { Roles } from '../lib/decorators/roles.decorator';
@@ -37,6 +37,18 @@ export class SystemMonitoringController {
   @Get('hardware/status')
   getDeviceStatus() {
     return this.service.getDeviceStatus();
+  }
+
+  @Post('hardware/ping')
+  recordDevicePing(
+    @Body()
+    body: {
+      deviceId?: string;
+      firmwareVersion?: string;
+      ip?: string;
+    },
+  ) {
+    return this.service.recordDevicePing(body);
   }
 
   @Get('hardware/events')

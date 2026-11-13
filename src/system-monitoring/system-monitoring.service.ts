@@ -23,9 +23,28 @@ export class SystemMonitoringService {
     return this.databaseService.getClient();
   }
 
+  async recordDevicePing(body: {
+    deviceId?: string;
+    firmwareVersion?: string;
+    ip?: string;
+  }) {
+    try {
+      const devName = body.deviceId || 'ARIS-ESP32';
+      const details = `Device: ${devName}${body.firmwareVersion ? ` | FW: ${body.firmwareVersion}` : ''}${body.ip ? ` | IP: ${body.ip}` : ''}`;
+      await this.db.query(
+        `INSERT INTO hardware_events (device_name, event, status, details, ip_address, occurred_at)
+         VALUES ($1, 'Device Connected', 'Success', $2, $3, NOW())`,
+        [devName, details, body.ip ?? null],
+      );
+      return SuccessHandler('Device ping recorded', 201);
+    } catch (e) {
+      return this.error(e);
+    }
+  }
+
   async getDeviceStatus() {
     try {
-      // Find the most recent "Device Connected" event and check if it was recent
+      // Find recent hardware events
       const result = await this.db.query<{
         id: string;
         occurred_at: Date;
@@ -51,14 +70,31 @@ export class SystemMonitoringService {
         };
       }
 
-      // "connected" = most recent event within the last 60 seconds is a successful Device Connected
-      const latest = rows[0];
-      const ageMs = Date.now() - new Date(latest.occurred_at).getTime();
-      const isRecent = ageMs < 60_000;
+      // Find if there was any explicit disconnect event
+      const disconnectRow = rows.find(
+        (r) => r.event === 'Device Disconnected' && r.status !== 'Failure',
+      );
+      const disconnectTime = disconnectRow
+        ? new Date(disconnectRow.occurred_at).getTime()
+        : 0;
+
+      // Find the latest successful connection/activity event
+      const connectedRow = rows.find(
+        (r) =>
+          (r.event === 'Device Connected' ||
+            r.event === 'Data Sent' ||
+            r.event === 'Fingerprint Enrolled' ||
+            r.event === 'DTR Recorded') &&
+          r.status !== 'Failure',
+      );
+
+      const connectTime = connectedRow
+        ? new Date(connectedRow.occurred_at).getTime()
+        : 0;
+
+      // Active if latest activity is after any disconnect and within a 15-minute active window
       const isConnected =
-        isRecent &&
-        latest.event === 'Device Connected' &&
-        latest.status !== 'Failure';
+        connectTime > disconnectTime && Date.now() - connectTime < 900_000;
 
       // Parse device id from details e.g. "Device: ESP32-ARIS-001" or "IP: 192.168.1.10 | ID: abc"
       const parseField = (details: string | null, key: string) => {
@@ -66,10 +102,6 @@ export class SystemMonitoringService {
         const m = details.match(new RegExp(`${key}:\\s*([^|\\n]+)`, 'i'));
         return m ? m[1].trim() : null;
       };
-
-      const connectedRow = rows.find(
-        (r) => r.event === 'Device Connected' && r.status !== 'Failure',
-      );
 
       const deviceId = connectedRow
         ? (parseField(connectedRow.details, 'ID') ??
