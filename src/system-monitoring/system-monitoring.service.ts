@@ -42,14 +42,23 @@ export class SystemMonitoringService {
 
       const rows = result.rows;
       if (rows.length === 0) {
-        return { connected: false, lastSeen: null, deviceId: null, ip: null, firmwareVersion: null };
+        return {
+          connected: false,
+          lastSeen: null,
+          deviceId: null,
+          ip: null,
+          firmwareVersion: null,
+        };
       }
 
       // "connected" = most recent event within the last 60 seconds is a successful Device Connected
       const latest = rows[0];
       const ageMs = Date.now() - new Date(latest.occurred_at).getTime();
       const isRecent = ageMs < 60_000;
-      const isConnected = isRecent && latest.event === 'Device Connected' && latest.status !== 'Failure';
+      const isConnected =
+        isRecent &&
+        latest.event === 'Device Connected' &&
+        latest.status !== 'Failure';
 
       // Parse device id from details e.g. "Device: ESP32-ARIS-001" or "IP: 192.168.1.10 | ID: abc"
       const parseField = (details: string | null, key: string) => {
@@ -62,13 +71,23 @@ export class SystemMonitoringService {
         (r) => r.event === 'Device Connected' && r.status !== 'Failure',
       );
 
-      const deviceId = connectedRow ? parseField(connectedRow.details, 'ID') ?? parseField(connectedRow.details, 'Device') : null;
-      const ip = connectedRow?.ip_address ?? parseField(connectedRow?.details ?? null, 'IP');
-      const firmwareVersion = connectedRow ? parseField(connectedRow.details, 'Firmware') ?? parseField(connectedRow.details, 'FW') : null;
+      const deviceId = connectedRow
+        ? (parseField(connectedRow.details, 'ID') ??
+          parseField(connectedRow.details, 'Device'))
+        : null;
+      const ip =
+        connectedRow?.ip_address ??
+        parseField(connectedRow?.details ?? null, 'IP');
+      const firmwareVersion = connectedRow
+        ? (parseField(connectedRow.details, 'Firmware') ??
+          parseField(connectedRow.details, 'FW'))
+        : null;
 
       return {
         connected: isConnected,
-        lastSeen: connectedRow ? new Date(connectedRow.occurred_at).toISOString() : null,
+        lastSeen: connectedRow
+          ? new Date(connectedRow.occurred_at).toISOString()
+          : null,
         deviceId,
         ip,
         firmwareVersion,

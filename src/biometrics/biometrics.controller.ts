@@ -35,6 +35,11 @@ export class BiometricsController {
     return this.biometricsService.getEnrolledBiometrics();
   }
 
+  @Get('slots')
+  getSlotSummary() {
+    return this.biometricsService.getSlotSummary();
+  }
+
   @Get('dtr')
   getDtrRecords(
     @Req() req: AuthedRequest,

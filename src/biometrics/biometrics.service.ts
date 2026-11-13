@@ -477,6 +477,47 @@ export class BiometricsService {
 
   // ───────────────────────── Listing ─────────────────────────
 
+  async getSlotSummary() {
+    try {
+      const result = await this.db.query<{
+        biometrics_id: string | null;
+        authenticator_fingerprint: string | null;
+      }>(
+        `SELECT biometrics_id, authenticator_fingerprint
+         FROM dtr_biometrics`,
+      );
+
+      const occupiedSet = new Set<number>();
+      for (const row of result.rows) {
+        const val = row.biometrics_id ?? row.authenticator_fingerprint;
+        if (!val) continue;
+        const n = parseInt(String(val).trim(), 10);
+        if (!isNaN(n) && n >= 0 && n < 128) {
+          occupiedSet.add(n);
+        }
+      }
+
+      const occupiedSlots = Array.from(occupiedSet).sort((a, b) => a - b);
+      let nextAvailableSlot = 0;
+      for (let i = 0; i < 128; i++) {
+        if (!occupiedSet.has(i)) {
+          nextAvailableSlot = i;
+          break;
+        }
+      }
+
+      return SuccessHandler('Successfully fetched slot summary', 200, {
+        totalCapacity: 128,
+        occupiedCount: occupiedSlots.length,
+        availableCount: Math.max(0, 128 - occupiedSlots.length),
+        occupiedSlots,
+        nextAvailableSlot,
+      });
+    } catch (error) {
+      return this.toError(error);
+    }
+  }
+
   async getEnrolledBiometrics() {
     try {
       const result = await this.db.query(`
