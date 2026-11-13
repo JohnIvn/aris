@@ -407,25 +407,69 @@ export class BiometricsService {
   }
 
   /** Admin: every record. Professor/staff: only their own. */
-  async getDtrRecords(user: DtrUser) {
+  async getDtrRecords(
+    user: DtrUser,
+    page: number,
+    limit: number,
+    missedOnly = false,
+  ) {
     try {
       const isAdmin = user.role === 'administrator';
+      const conds: string[] = [];
+      const params: unknown[] = [];
+
+      if (!isAdmin) {
+        params.push(user.id);
+        conds.push(`(d.professor_id = $1 OR d.staff_id = $1)`);
+      }
+      if (missedOnly) {
+        conds.push(
+          `(d.time_in IS NULL OR (d.time_out IS NULL AND d.shift_date < ${TODAY}))`,
+        );
+      }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+      const {
+        rows: [{ total }],
+      } = await this.db.query(
+        `SELECT COUNT(*)::int AS total FROM dtr d ${where}`,
+        params,
+      );
+
+      const limitIdx = params.length + 1;
+      const offsetIdx = params.length + 2;
       const { rows } = await this.db.query(
         `SELECT d.id, d.professor_id, d.staff_id, d.admin_id, d.authenticator_tag,
-                d.time_in::text, d.time_out::text, d.total_hours::text,
-                d.shift_date::text, d.on_site, d.created_at, d.updated_at,
-                COALESCE(p.employee_id, s.employee_id) AS employee_id,
-                TRIM(CONCAT(COALESCE(p.firstname, s.firstname), ' ', COALESCE(p.lastname, s.lastname))) AS name,
-                (d.time_in IS NULL) AS missed_time_in,
-                (d.time_out IS NULL AND d.shift_date < ${TODAY}) AS missed_time_out
-         FROM dtr d
-         LEFT JOIN user_professors p ON d.professor_id = p.id
-         LEFT JOIN user_staffs s ON d.staff_id = s.id
-         ${isAdmin ? '' : 'WHERE d.professor_id = $1 OR d.staff_id = $1'}
-         ORDER BY d.shift_date DESC, d.created_at DESC`,
-        isAdmin ? [] : [user.id],
+              d.time_in::text, d.time_out::text, d.total_hours::text,
+              d.shift_date::text, d.on_site, d.created_at, d.updated_at,
+              COALESCE(p.employee_id, s.employee_id) AS employee_id,
+              TRIM(CONCAT(COALESCE(p.firstname, s.firstname), ' ', COALESCE(p.lastname, s.lastname))) AS name,
+              (d.time_in IS NULL) AS missed_time_in,
+              (d.time_out IS NULL AND d.shift_date < ${TODAY}) AS missed_time_out,
+              (SELECT COALESCE(SUM(x.total_hours), 0)::text
+                 FROM dtr x
+                WHERE x.shift_date = d.shift_date
+                  AND x.professor_id IS NOT DISTINCT FROM d.professor_id
+                  AND x.staff_id IS NOT DISTINCT FROM d.staff_id
+                  AND x.time_in IS NOT NULL AND x.time_out IS NOT NULL) AS daily_hours
+       FROM dtr d
+       LEFT JOIN user_professors p ON d.professor_id = p.id
+       LEFT JOIN user_staffs s ON d.staff_id = s.id
+       ${where}
+       ORDER BY d.shift_date DESC, d.created_at DESC
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        [...params, limit, (page - 1) * limit],
       );
-      return SuccessHandler('Successfully fetched DTR records', 200, rows);
+
+      return {
+        ...SuccessHandler('Successfully fetched DTR records', 200, rows),
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+      };
     } catch (error) {
       return this.toError(error);
     }
