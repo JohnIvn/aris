@@ -23,6 +23,62 @@ export class SystemMonitoringService {
     return this.databaseService.getClient();
   }
 
+  async getDeviceStatus() {
+    try {
+      // Find the most recent "Device Connected" event and check if it was recent
+      const result = await this.db.query<{
+        id: string;
+        occurred_at: Date;
+        event: string;
+        status: string;
+        details: string | null;
+        ip_address: string | null;
+      }>(
+        `SELECT id, occurred_at, event, status, details, ip_address
+         FROM hardware_events
+         ORDER BY occurred_at DESC
+         LIMIT 20`,
+      );
+
+      const rows = result.rows;
+      if (rows.length === 0) {
+        return { connected: false, lastSeen: null, deviceId: null, ip: null, firmwareVersion: null };
+      }
+
+      // "connected" = most recent event within the last 60 seconds is a successful Device Connected
+      const latest = rows[0];
+      const ageMs = Date.now() - new Date(latest.occurred_at).getTime();
+      const isRecent = ageMs < 60_000;
+      const isConnected = isRecent && latest.event === 'Device Connected' && latest.status !== 'Failure';
+
+      // Parse device id from details e.g. "Device: ESP32-ARIS-001" or "IP: 192.168.1.10 | ID: abc"
+      const parseField = (details: string | null, key: string) => {
+        if (!details) return null;
+        const m = details.match(new RegExp(`${key}:\\s*([^|\\n]+)`, 'i'));
+        return m ? m[1].trim() : null;
+      };
+
+      const connectedRow = rows.find(
+        (r) => r.event === 'Device Connected' && r.status !== 'Failure',
+      );
+
+      const deviceId = connectedRow ? parseField(connectedRow.details, 'ID') ?? parseField(connectedRow.details, 'Device') : null;
+      const ip = connectedRow?.ip_address ?? parseField(connectedRow?.details ?? null, 'IP');
+      const firmwareVersion = connectedRow ? parseField(connectedRow.details, 'Firmware') ?? parseField(connectedRow.details, 'FW') : null;
+
+      return {
+        connected: isConnected,
+        lastSeen: connectedRow ? new Date(connectedRow.occurred_at).toISOString() : null,
+        deviceId,
+        ip,
+        firmwareVersion,
+        recentEventCount: rows.length,
+      };
+    } catch (error) {
+      return this.error(error);
+    }
+  }
+
   async getHardwareEvents() {
     try {
       const result = await this.db.query<{

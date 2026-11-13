@@ -35,13 +35,19 @@ export class OTAService {
   private async ensureBucket(supabase: SupabaseClient) {
     const { data: buckets, error: listError } =
       await supabase.storage.listBuckets();
-    if (listError) throw new Error(`Unable to inspect storage buckets: ${listError.message}`);
+    if (listError)
+      throw new Error(
+        `Unable to inspect storage buckets: ${listError.message}`,
+      );
     if (buckets?.some((bucket) => bucket.name === OTA_BUCKET)) return;
 
-    const { error: createError } = await supabase.storage.createBucket(OTA_BUCKET, {
-      public: false,
-      fileSizeLimit: '20MB',
-    });
+    const { error: createError } = await supabase.storage.createBucket(
+      OTA_BUCKET,
+      {
+        public: false,
+        fileSizeLimit: '20MB',
+      },
+    );
     if (createError && !/already exists/i.test(createError.message)) {
       throw new Error(`Unable to create OTA bucket: ${createError.message}`);
     }
@@ -73,9 +79,11 @@ export class OTAService {
       }));
     } catch (error) {
       this.logger.error(error);
-      return this.invalid(error instanceof Error ? error.message : 'Unable to list OTA files', 500);
+      return this.invalid(
+        error instanceof Error ? error.message : 'Unable to list OTA files',
+        500,
+      );
     }
-
   }
 
   async getMainFile() {
@@ -89,59 +97,81 @@ export class OTAService {
         return this.invalid('No main OTA file has been designated', 404);
       }
 
+      return this.getFile(mainFile);
+    } catch (error) {
+      this.logger.error(error);
+      return this.invalid(
+        error instanceof Error
+          ? error.message
+          : 'Unable to download main OTA file',
+        500,
+      );
+    }
+  }
+
+  async getFile(name: string | undefined) {
+    try {
+      if (!name || name.includes('/') || name.includes('\\')) {
+        return this.invalid('A valid OTA filename is required');
+      }
+
       const supabase = this.getSupabase();
       await this.ensureBucket(supabase);
       const { data, error } = await supabase.storage
         .from(OTA_BUCKET)
-        .download(mainFile);
-      if (error) throw new Error(`Unable to download main OTA file: ${error.message}`);
+        .download(name);
+      if (error)
+        throw new Error(`Unable to download OTA file: ${error.message}`);
 
       const content = Buffer.from(await data.arrayBuffer()).toString('base64');
-      return { name: mainFile, content };
+      return { name, content };
     } catch (error) {
       this.logger.error(error);
       return this.invalid(
-        error instanceof Error ? error.message : 'Unable to download main OTA file',
+        error instanceof Error ? error.message : 'Unable to download OTA file',
         500,
       );
     }
   }
 
   async setMainFile(user: UserSession, name: string | undefined) {
-      try {
-        if (!name || name.includes('/') || name.includes('\\')) {
-          return this.invalid('A valid OTA filename is required');
-        }
+    try {
+      if (!name || name.includes('/') || name.includes('\\')) {
+        return this.invalid('A valid OTA filename is required');
+      }
 
-        const supabase = this.getSupabase();
-        await this.ensureBucket(supabase);
-        const { data: files, error: listError } = await supabase.storage
-          .from(OTA_BUCKET)
-          .list('', { limit: 100 });
-        if (listError) throw new Error(`Unable to verify OTA file: ${listError.message}`);
-        if (!files.some((file) => file.name === name)) {
-          return this.invalid('The selected OTA file does not exist', 404);
-        }
+      const supabase = this.getSupabase();
+      await this.ensureBucket(supabase);
+      const { data: files, error: listError } = await supabase.storage
+        .from(OTA_BUCKET)
+        .list('', { limit: 100 });
+      if (listError)
+        throw new Error(`Unable to verify OTA file: ${listError.message}`);
+      if (!files.some((file) => file.name === name)) {
+        return this.invalid('The selected OTA file does not exist', 404);
+      }
 
-        await this.db.query(
-          `INSERT INTO system_settings
+      await this.db.query(
+        `INSERT INTO system_settings
              (setting_key, setting_value, data_type, category, description, updated_by)
            VALUES ('ota_main_file', $1, 'string', 'system', 'The OTA file downloaded by clients', $2)
            ON CONFLICT (setting_key) DO UPDATE
              SET setting_value = EXCLUDED.setting_value,
                  updated_by = EXCLUDED.updated_by,
                  updated_at = NOW()`,
-          [name, user.id],
-        );
+        [name, user.id],
+      );
 
-        return SuccessHandler('Main OTA file updated successfully', 200, { name });
-      } catch (error) {
-        this.logger.error(error);
-        return this.invalid(
-          error instanceof Error ? error.message : 'Unable to set main OTA file',
-          500,
-        );
-      }
+      return SuccessHandler('Main OTA file updated successfully', 200, {
+        name,
+      });
+    } catch (error) {
+      this.logger.error(error);
+      return this.invalid(
+        error instanceof Error ? error.message : 'Unable to set main OTA file',
+        500,
+      );
+    }
   }
 
   async uploadFile(_user: UserSession, file: MultipartFile) {
@@ -154,11 +184,12 @@ export class OTAService {
       await this.ensureBucket(supabase);
       const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
       const objectPath = `${Date.now()}-${safeName}`;
-      const { error } = await supabase.storage.from(OTA_BUCKET).upload(
-        objectPath,
-        await file.toBuffer(),
-        { contentType: 'application/octet-stream', upsert: false },
-      );
+      const { error } = await supabase.storage
+        .from(OTA_BUCKET)
+        .upload(objectPath, await file.toBuffer(), {
+          contentType: 'application/octet-stream',
+          upsert: false,
+        });
       if (error) throw new Error(`OTA upload failed: ${error.message}`);
 
       return SuccessHandler('OTA file uploaded successfully', 201, {
@@ -166,7 +197,10 @@ export class OTAService {
       });
     } catch (error) {
       this.logger.error(error);
-      return this.invalid(error instanceof Error ? error.message : 'OTA upload failed', 500);
+      return this.invalid(
+        error instanceof Error ? error.message : 'OTA upload failed',
+        500,
+      );
     }
   }
 

@@ -42,27 +42,6 @@ function formatDisplayDate(d: Date | string | null): string {
   });
 }
 
-function toDbStatus(
-  s: string | undefined,
-): 'pending' | 'approved' | 'rejected' | 'disapproved' | 'submitted' {
-  const lower = String(s || 'pending').toLowerCase();
-  if (
-    [
-      'pending',
-      'approved',
-      'rejected',
-      'disapproved',
-      'submitted',
-      'draft',
-      'flagged',
-      'missing',
-    ].includes(lower)
-  ) {
-    return lower as any;
-  }
-  return 'pending';
-}
-
 function parseCampus(
   c: string | undefined,
 ): 'south' | 'congress' | 'camarin' | 'bagong silang' {
