@@ -89,19 +89,35 @@ export class OTAService {
         return this.invalid('No main OTA file has been designated', 404);
       }
 
-      const supabase = this.getSupabase();
-      await this.ensureBucket(supabase);
-      const { data, error } = await supabase.storage
-        .from(OTA_BUCKET)
-        .download(mainFile);
-      if (error) throw new Error(`Unable to download main OTA file: ${error.message}`);
-
-      const content = Buffer.from(await data.arrayBuffer()).toString('base64');
-      return { name: mainFile, content };
+      return this.getFile(mainFile);
     } catch (error) {
       this.logger.error(error);
       return this.invalid(
         error instanceof Error ? error.message : 'Unable to download main OTA file',
+        500,
+      );
+    }
+  }
+
+  async getFile(name: string | undefined) {
+    try {
+      if (!name || name.includes('/') || name.includes('\\')) {
+        return this.invalid('A valid OTA filename is required');
+      }
+
+      const supabase = this.getSupabase();
+      await this.ensureBucket(supabase);
+      const { data, error } = await supabase.storage
+        .from(OTA_BUCKET)
+        .download(name);
+      if (error) throw new Error(`Unable to download OTA file: ${error.message}`);
+
+      const content = Buffer.from(await data.arrayBuffer()).toString('base64');
+      return { name, content };
+    } catch (error) {
+      this.logger.error(error);
+      return this.invalid(
+        error instanceof Error ? error.message : 'Unable to download OTA file',
         500,
       );
     }
