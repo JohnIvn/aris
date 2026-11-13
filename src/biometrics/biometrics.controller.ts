@@ -36,8 +36,18 @@ export class BiometricsController {
   }
 
   @Get('dtr')
-  getDtrRecords(@Req() req: AuthedRequest) {
-    return this.biometricsService.getDtrRecords(req.user);
+  getDtrRecords(
+    @Req() req: AuthedRequest,
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+    @Query('missed') missed?: string,
+  ) {
+    return this.biometricsService.getDtrRecords(
+      req.user,
+      Math.max(1, Number(page) || 1),
+      Math.min(100, Math.max(1, Number(limit) || 20)),
+      missed === 'true',
+    );
   }
 
   @Post('enroll')
