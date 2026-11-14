@@ -10,6 +10,7 @@ import {
 } from './dto/enroll-biometric.dto';
 import { UserRoles } from '../lib/data/types';
 import { TransactionsDto } from './dto/biometrics-transactions.dto';
+import { UserSession } from '../lib/data/interfaces';
 
 export interface EnrolledBiometricRecord {
   id: string;
@@ -640,6 +641,25 @@ export class BiometricsService {
   }
 
   // ZKTeco Transactions
+  async getBiometricsTransactionPerUser(user: UserSession) {
+    try {
+      const biometrics_exists = await this.db.query(
+        `SELECT * FROM user_biometrics_id
+        WHERE professor_id = $1 OR staff_id = $2
+        LIMIT 1`,
+        [user.id, user.id],
+      );
+
+      if (!biometrics_exists)
+        return ErrorHandler('User not found', 404, {
+          message:
+            'If you are registered to any biometrics, please notify admin support',
+        });
+    } catch (error) {
+      return this.toError(error);
+    }
+  }
+
   async getBiometricsTransactions(
     page = 1,
     limit = 50,
@@ -715,6 +735,16 @@ export class BiometricsService {
   }
   async recordTransactions(transactionDto: TransactionsDto) {
     try {
+      await this.db.query(
+        `INSERT INTO user_id_biometrics (
+          biometrics_emp_id
+        )
+        VALUES ($1)
+        ON CONFLICT (biometrics_emp_id)
+        DO NOTHING`,
+        [transactionDto.emp],
+      );
+
       const result = await this.db.query(
         `
       INSERT INTO attendance_transactions (
