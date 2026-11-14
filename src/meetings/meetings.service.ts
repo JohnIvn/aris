@@ -360,10 +360,18 @@ export class MeetingsService {
     }
   }
 
-  async fetchMeetings(user: UserSession, offset = 0, limit = 50) {
+  async fetchMeetings(
+    user: UserSession,
+    offset = 0,
+    limit = 50,
+    emailQuery?: string,
+  ) {
     try {
       const client = this.databaseService.getClient();
-      const professorId = await this.resolveProfessorId(user);
+      const professorId = await this.resolveProfessorId(
+        user,
+        emailQuery,
+      );
 
       let query = `
         SELECT mr.*,
@@ -375,9 +383,15 @@ export class MeetingsService {
       `;
       const params: unknown[] = [];
 
-      if (user?.role === 'professor' && professorId) {
-        query += ` WHERE (mr.professor_id = $1 OR mr.professor_id IS NULL) `;
+      if (professorId) {
+        query += ` WHERE (mr.professor_id = $1) `;
         params.push(professorId);
+      } else if (emailQuery && emailQuery.trim()) {
+        query += ` WHERE LOWER(up.email) = LOWER($1) `;
+        params.push(emailQuery.trim());
+      } else if (user?.role === 'professor') {
+        // If professor account has no match, return empty rather than leaking global meetings
+        return SuccessHandler('Meetings retrieved', 200, []);
       }
 
       query += ` ORDER BY mr.started_at DESC NULLS LAST, mr.created_at DESC LIMIT $${
@@ -394,10 +408,18 @@ export class MeetingsService {
     }
   }
 
-  async fetchSummaries(user: UserSession, offset = 0, limit = 50) {
+  async fetchSummaries(
+    user: UserSession,
+    offset = 0,
+    limit = 50,
+    emailQuery?: string,
+  ) {
     try {
       const client = this.databaseService.getClient();
-      const professorId = await this.resolveProfessorId(user);
+      const professorId = await this.resolveProfessorId(
+        user,
+        emailQuery,
+      );
 
       let query = `
         SELECT mr.*,
@@ -409,9 +431,14 @@ export class MeetingsService {
       `;
       const params: unknown[] = [];
 
-      if (user?.role === 'professor' && professorId) {
-        query += ` WHERE (mr.professor_id = $1 OR mr.professor_id IS NULL) `;
+      if (professorId) {
+        query += ` WHERE (mr.professor_id = $1) `;
         params.push(professorId);
+      } else if (emailQuery && emailQuery.trim()) {
+        query += ` WHERE LOWER(up.email) = LOWER($1) `;
+        params.push(emailQuery.trim());
+      } else if (user?.role === 'professor') {
+        return SuccessHandler('Summaries retrieved', 200, []);
       }
 
       query += ` ORDER BY mr.started_at DESC NULLS LAST, mr.created_at DESC LIMIT $${

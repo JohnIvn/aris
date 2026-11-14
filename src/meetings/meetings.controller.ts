@@ -27,8 +27,9 @@ export class MeetingsController {
     @CurrentUser() user: UserSession,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('email') email?: string,
   ) {
-    return this.meetingsService.fetchMeetings(user, offset, limit);
+    return this.meetingsService.fetchMeetings(user, offset, limit, email);
   }
 
   @Get('summaries')
@@ -36,8 +37,9 @@ export class MeetingsController {
     @CurrentUser() user: UserSession,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('email') email?: string,
   ) {
-    return this.meetingsService.fetchSummaries(user, offset, limit);
+    return this.meetingsService.fetchSummaries(user, offset, limit, email);
   }
 
   @Post()
