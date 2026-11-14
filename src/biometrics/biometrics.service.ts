@@ -73,7 +73,7 @@ const TZ = 'Asia/Manila';
 const TODAY = `(NOW() AT TIME ZONE '${TZ}')::date`;
 const NOW_TIME = `(NOW() AT TIME ZONE '${TZ}')::time(0)`;
 const DEBOUNCE_SECONDS = 60; // ignore a second scan right after a punch
-const TAG_RE = /^auth-\d{5,}$/; // matches the authenticators.tag default, e.g. auth-00001
+const TAG_RE = /^(auth-\d{5,}|[A-Za-z0-9_-]{3,32})$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -189,7 +189,7 @@ export class BiometricsService {
       if (existing.rows[0]) {
         const upd = await client.query<{ id: string }>(
           `UPDATE dtr_biometrics
-           SET authenticator_tag = $1, authenticator_fingerprint = $2, updated_at = NOW()
+           SET authenticator_tag = $1, authenticator_fingerprint = $2, biometrics_id = $2, updated_at = NOW()
            WHERE id = $3
            RETURNING id`,
           [tag, slot, existing.rows[0].id],
@@ -197,8 +197,8 @@ export class BiometricsService {
         enrolledId = upd.rows[0].id;
       } else {
         const ins = await client.query<{ id: string }>(
-          `INSERT INTO dtr_biometrics (${col}, authenticator_tag, authenticator_fingerprint)
-           VALUES ($1, $2, $3)
+          `INSERT INTO dtr_biometrics (${col}, authenticator_tag, authenticator_fingerprint, biometrics_id)
+           VALUES ($1, $2, $3, $2)
            RETURNING id`,
           [data.user_id, tag, slot],
         );

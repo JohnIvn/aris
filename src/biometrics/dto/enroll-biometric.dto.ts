@@ -6,7 +6,7 @@ export class EnrollBiometricDto {
 
   // Device tag, e.g. auth-00001
   @IsString()
-  @Matches(/^auth-\d{5,}$/)
+  @Matches(/^(auth-\d{5,}|[A-Za-z0-9_-]{3,32})$/)
   authenticator_tag!: string;
 
   // fingerprintId reported by the sensor after enrollment, saved as
