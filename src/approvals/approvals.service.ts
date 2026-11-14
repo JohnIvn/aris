@@ -607,7 +607,7 @@ export class ApprovalsService {
         const nextStage = nextStageOf(currentStage);
         const nextStageKey = nextStage
           ? DTR_NEXT_STAGE_KEY[currentStage]
-          : 'AR-AP-STG-4';
+          : 'DTR-AP-STG-4';
         const nextStatus = disapproved
           ? 'disapproved'
           : nextStage

@@ -433,7 +433,19 @@ export class AuditService {
           },
         ];
 
-        const stageOrder = Number(first.stage_order) || 1;
+        // approval_stages stores AR (1-4) and DTR (5-8) in one global order,
+        // so normalize the DTR stage to its own 1-4 position before comparing.
+        const stageKey = String(first.approval_stage || '').toUpperCase();
+        const dtrStageIndex = [
+          'DTR-AP-STG-1',
+          'DTR-AP-STG-2',
+          'DTR-AP-STG-3',
+          'DTR-AP-STG-4',
+        ].indexOf(stageKey);
+        const stageOrder =
+          dtrStageIndex !== -1
+            ? dtrStageIndex + 1
+            : Math.max(1, (Number(first.stage_order) || 1) - 4);
         const submissionStatus = String(
           first.submission_status || '',
         ).toLowerCase();
@@ -452,9 +464,12 @@ export class AuditService {
         ) {
           result = 'Rejected';
           action = 'DTR rejected · Returned for correction';
-        } else if (submissionStatus === 'approved' || stageOrder >= 4) {
+        } else if (submissionStatus === 'approved') {
           result = 'Approved';
           action = 'DTR approved · Accounting validation complete';
+        } else if (stageOrder >= 4) {
+          result = 'Pending';
+          action = 'DTR in Accounting validation';
         } else {
           result = 'Pending';
           action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
