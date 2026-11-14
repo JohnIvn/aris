@@ -661,6 +661,7 @@ export class BiometricsService {
   }
 
   async getBiometricsTransactions(
+    user: UserSession,
     page = 1,
     limit = 50,
     empCode?: string,
@@ -668,11 +669,46 @@ export class BiometricsService {
     endDate?: string,
   ) {
     try {
+      const role = user.role;
       const offset = (page - 1) * limit;
 
       const conditions: string[] = [];
       const values: any[] = [];
 
+      // Restrict non-admin users to their own biometric employee ID.
+      if (role !== 'admin') {
+        const userEmpResult = await this.db.query(
+          `
+        SELECT biometrics_emp_id
+        FROM user_id_biometrics
+        WHERE professor_id = $1 OR staff_id = $1
+        LIMIT 1
+        `,
+          [user.id],
+        );
+
+        const userEmpId = userEmpResult.rows[0]?.biometrics_emp_id;
+
+        // Do not expose transactions if no biometric ID is linked.
+        if (!userEmpId) {
+          return {
+            success: true,
+            message: 'No biometric employee ID is linked to this account.',
+            data: [],
+            pagination: {
+              total: 0,
+              page,
+              limit,
+              totalPages: 0,
+            },
+          };
+        }
+
+        values.push(userEmpId);
+        conditions.push(`emp = $${values.length}`);
+      }
+
+      // Optional filters
       if (empCode) {
         values.push(empCode);
         conditions.push(`emp_code = $${values.length}`);
@@ -692,6 +728,7 @@ export class BiometricsService {
         ? `WHERE ${conditions.join(' AND ')}`
         : '';
 
+      // Count matching transactions
       const countResult = await this.db.query(
         `
       SELECT COUNT(*)::INTEGER AS total
@@ -701,8 +738,10 @@ export class BiometricsService {
         values,
       );
 
-      values.push(limit);
-      values.push(offset);
+      const total = countResult.rows[0].total;
+
+      // Pagination
+      const queryValues = [...values, limit, offset];
 
       const result = await this.db.query(
         `
@@ -710,13 +749,11 @@ export class BiometricsService {
       FROM attendance_transactions
       ${whereClause}
       ORDER BY punch_time DESC
-      LIMIT $${values.length - 1}
-      OFFSET $${values.length}
+      LIMIT $${queryValues.length - 1}
+      OFFSET $${queryValues.length}
       `,
-        values,
+        queryValues,
       );
-
-      const total = countResult.rows[0].total;
 
       return {
         success: true,
@@ -733,6 +770,7 @@ export class BiometricsService {
       return this.toError(error);
     }
   }
+
   async recordTransactions(transactionDto: TransactionsDto) {
     try {
       await this.db.query(

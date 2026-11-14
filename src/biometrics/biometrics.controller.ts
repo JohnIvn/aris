@@ -20,6 +20,8 @@ import {
   PunchDto,
 } from './dto/enroll-biometric.dto';
 import { SuccessHandler } from '../lib/utils/handlers';
+import { CurrentUser } from '../lib/decorators/cookie-decorator';
+import { type UserSession } from '../lib/data/interfaces';
 
 interface AuthedRequest {
   user: { id: string; role: string };
@@ -94,8 +96,10 @@ export class BiometricsController {
     }
   }
 
+  @UseGuards(JwtCookieGuard)
   @Get('transactions')
   async getBiometricsTransactions(
+    @CurrentUser() user: UserSession,
     @Query('page') page = '1',
     @Query('limit') limit = '50',
     @Query('emp_code') empCode?: string,
@@ -103,6 +107,7 @@ export class BiometricsController {
     @Query('end_date') endDate?: string,
   ) {
     return this.biometricsService.getBiometricsTransactions(
+      user,
       Math.max(1, Number(page) || 1),
       Math.min(100, Math.max(1, Number(limit) || 50)),
       empCode,
