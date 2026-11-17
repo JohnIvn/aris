@@ -368,10 +368,7 @@ export class MeetingsService {
   ) {
     try {
       const client = this.databaseService.getClient();
-      const professorId = await this.resolveProfessorId(
-        user,
-        emailQuery,
-      );
+      const professorId = await this.resolveProfessorId(user, emailQuery);
 
       let query = `
         SELECT mr.*,
@@ -416,10 +413,7 @@ export class MeetingsService {
   ) {
     try {
       const client = this.databaseService.getClient();
-      const professorId = await this.resolveProfessorId(
-        user,
-        emailQuery,
-      );
+      const professorId = await this.resolveProfessorId(user, emailQuery);
 
       let query = `
         SELECT mr.*,
