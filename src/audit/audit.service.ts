@@ -284,7 +284,12 @@ export class AuditService {
         let result: 'Approved' | 'Rejected' | 'Pending' = 'Pending';
         let action = 'AR submitted';
 
-        if (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks)) {
+        const isDisapproved =
+          ar.submission_status === 'disapproved' ||
+          ar.submission_status === 'rejected' ||
+          (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks));
+
+        if (isDisapproved) {
           result = 'Rejected';
           action = 'AR rejected · Returned for correction';
         } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {

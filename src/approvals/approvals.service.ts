@@ -353,31 +353,32 @@ export class ApprovalsService {
           STAGE_ORDER_MAP[ar.stage_order] ||
           'Checker';
 
+        const isDisapproved =
+          ar.submission_status === 'disapproved' ||
+          ar.submission_status === 'rejected' ||
+          (ar.submission_status !== 'approved' &&
+            ar.remarks &&
+            /reject|disapprov/i.test(ar.remarks) &&
+            !/resubmit/i.test(ar.remarks));
+
         const isResubmitted =
-          (ar.submission_status === 'pending' &&
-            (ar.approval_stage === 'AR-AP-STG-1' ||
-              ar.stage_order === 1 ||
-              (ar.submission_event && /resubmit/i.test(ar.submission_event)) ||
-              (ar.remarks && /resubmit|correction/i.test(ar.remarks)))) ||
-          Boolean(
+          !isDisapproved &&
+          ar.submission_status === 'pending' &&
+          (Boolean(
             ar.submission_event && /resubmit/i.test(ar.submission_event),
           ) ||
-          Boolean(ar.remarks && /resubmit/i.test(ar.remarks));
+            Boolean(ar.remarks && /resubmit/i.test(ar.remarks)));
 
         // Status mapping
         let status: StatusKind = 'Pending';
         let action = 'AR submitted';
 
-        if (isResubmitted) {
-          status = 'Pending';
-          action = 'AR resubmitted with corrections · Pending review';
-        } else if (
-          ar.remarks &&
-          /reject|disapprov/i.test(ar.remarks) &&
-          !/resubmit/i.test(ar.remarks)
-        ) {
+        if (isDisapproved) {
           status = 'Disapproved';
           action = 'AR returned for correction';
+        } else if (isResubmitted) {
+          status = 'Pending';
+          action = 'AR resubmitted with corrections · Pending review';
         } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {
           status =
             ar.payroll_availability || ar.payroll_received
@@ -432,18 +433,22 @@ export class ApprovalsService {
             tasks:
               tasks ||
               'Conducted scheduled lectures, prepared modules, and submitted grade records.',
-            notes: isResubmitted
-              ? ar.remarks &&
-                !/disapprov|reject|returned to the faculty/i.test(ar.remarks)
-                ? ar.remarks
-                : 'Resubmitted with corrections. Pending review.'
-              : ar.remarks || undefined,
+            notes: isDisapproved
+              ? ar.remarks || 'Returned to faculty for correction.'
+              : isResubmitted
+                ? ar.remarks &&
+                  !/disapprov|reject|returned to the faculty/i.test(ar.remarks)
+                  ? ar.remarks
+                  : 'Resubmitted with corrections. Pending review.'
+                : ar.remarks || undefined,
             attachment: `${ar.faculty_name.replace(/[^a-zA-Z]/g, '')}_AR_${periodStr.replace(/\s+/g, '_')}.pdf · 1.2 MB`,
             reviewer,
             reviewedAt,
-            remark: isResubmitted
-              ? 'Resubmitted with corrections. Pending review.'
-              : ar.remarks || `Current Stage: ${stage}. Awaiting verification.`,
+            remark: isDisapproved
+              ? ar.remarks || `Disapproved at ${stage} stage.`
+              : isResubmitted
+                ? 'Resubmitted with corrections. Pending review.'
+                : ar.remarks || `Current Stage: ${stage}. Awaiting verification.`,
           },
         });
       }
@@ -494,10 +499,14 @@ export class ApprovalsService {
         let status: StatusKind = 'Pending';
         let action = `DTR submitted · ${first.stage_label || stage}`;
 
-        if (
+        const isDtrDisapproved =
           first.submission_status === 'disapproved' ||
-          first.submission_status === 'rejected'
-        ) {
+          first.submission_status === 'rejected' ||
+          (first.remarks &&
+            /reject|disapprov/i.test(first.remarks) &&
+            !/resubmit/i.test(first.remarks));
+
+        if (isDtrDisapproved) {
           status = 'Disapproved';
           action = 'DTR returned for correction';
         } else if (
@@ -545,7 +554,7 @@ export class ApprovalsService {
 
       const scopedItems = staffRole
         ? items.filter((it) => it.stage === staffRole)
-        : [];
+        : items;
       return SuccessHandler('Approvals fetched successfully', 200, scopedItems);
     } catch (error) {
       if (error instanceof Error) {
@@ -629,7 +638,7 @@ export class ApprovalsService {
                   updated_at = NOW()
             WHERE id = $4`,
           [
-            disapproved ? 'DTR-AP-STG-1' : nextStageKey,
+            disapproved ? dtrSubmission.rows[0].approval_stage : nextStageKey,
             nextStatus,
             remarkText,
             id,
@@ -639,7 +648,7 @@ export class ApprovalsService {
           id,
           action,
           remark: remarkText,
-          stage: disapproved ? 'Checker' : nextStage || currentStage,
+          stage: disapproved ? currentStage : nextStage || currentStage,
           status: nextStatus,
         });
       }
@@ -898,32 +907,26 @@ export class ApprovalsService {
 
           await this.client.query(
             `UPDATE accomplishment_reports
-                SET approval_stage = 'AR-AP-STG-1',
-                    remarks = $1,
-                    payroll_availability = FALSE,
-                    payroll_received = FALSE,
-                    payroll_received_date = NULL,
-                    updated_at = NOW()
-              WHERE id = $2`,
-            [remarkText, id],
-          );
-
-          await this.client.query(
-            `UPDATE accomplishment_reports
-                SET submission_status = 'disapproved',
-                    submission_notes = $1,
-                    submission_event = $2,
+                SET approval_stage = $1,
+                    remarks = $2,
+                    submission_status = 'disapproved',
+                    submission_notes = $2,
+                    submission_event = $3,
                     reviewed_by = $4,
                     reviewed_at = NOW(),
                     current_stage = 'Faculty',
                     current_since = NOW(),
+                    payroll_availability = FALSE,
+                    payroll_received = FALSE,
+                    payroll_received_date = NULL,
                     updated_at = NOW()
-              WHERE id = $3`,
+              WHERE id = $5`,
             [
+              currentStageKey,
               remarkText,
               `AR returned for correction by ${role || currentStageRole}`,
-              id,
               user.id,
+              id,
             ],
           );
 

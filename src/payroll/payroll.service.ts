@@ -195,6 +195,7 @@ export class PayrollService {
         calculated_hours: number;
         approval_stage: string;
         remarks: string | null;
+        submission_status?: string | null;
         payroll_availability: boolean;
         created_at: Date;
       }>(
@@ -218,6 +219,7 @@ export class PayrollService {
            )::numeric AS calculated_hours,
            ar.approval_stage,
            ar.remarks,
+           ar.submission_status,
            ar.payroll_availability,
            ar.created_at
          FROM accomplishment_reports ar
@@ -230,14 +232,16 @@ export class PayrollService {
         if (recordedReportIds.has(ar.id)) continue;
 
         let status: 'Approved' | 'Pending' | 'Rejected' = 'Pending';
-        if (ar.payroll_availability || ar.approval_stage === 'AR-AP-STG-4') {
-          status = 'Approved';
-        } else if (
-          ar.remarks &&
-          /reject|disapprov/i.test(ar.remarks) &&
-          !/resubmit/i.test(ar.remarks)
+        if (
+          ar.submission_status === 'disapproved' ||
+          ar.submission_status === 'rejected' ||
+          (ar.remarks &&
+            /reject|disapprov/i.test(ar.remarks) &&
+            !/resubmit/i.test(ar.remarks))
         ) {
           status = 'Rejected';
+        } else if (ar.payroll_availability || ar.approval_stage === 'AR-AP-STG-4') {
+          status = 'Approved';
         }
 
         const hours =

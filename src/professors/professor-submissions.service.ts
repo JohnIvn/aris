@@ -248,7 +248,12 @@ export class ProfessorSubmissionsService {
           const revCheck = await this.client.query(
             `SELECT id FROM accomplishment_reports 
               WHERE (user_id = $1 OR employee_id = $2 OR faculty_no = $3)
-                AND (remarks ILIKE '%disapprov%' OR remarks ILIKE '%reject%' OR remarks ILIKE '%correction%')
+                AND (
+                  submission_status IN ('disapproved', 'rejected')
+                  OR remarks ILIKE '%disapprov%'
+                  OR remarks ILIKE '%reject%'
+                  OR remarks ILIKE '%correction%'
+                )
               ORDER BY updated_at DESC LIMIT 1`,
             [profId, employeeId, facultyNo],
           );
