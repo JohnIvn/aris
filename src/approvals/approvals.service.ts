@@ -448,7 +448,8 @@ export class ApprovalsService {
               ? ar.remarks || `Disapproved at ${stage} stage.`
               : isResubmitted
                 ? 'Resubmitted with corrections. Pending review.'
-                : ar.remarks || `Current Stage: ${stage}. Awaiting verification.`,
+                : ar.remarks ||
+                  `Current Stage: ${stage}. Awaiting verification.`,
           },
         });
       }

@@ -240,7 +240,10 @@ export class PayrollService {
             !/resubmit/i.test(ar.remarks))
         ) {
           status = 'Rejected';
-        } else if (ar.payroll_availability || ar.approval_stage === 'AR-AP-STG-4') {
+        } else if (
+          ar.payroll_availability ||
+          ar.approval_stage === 'AR-AP-STG-4'
+        ) {
           status = 'Approved';
         }
 

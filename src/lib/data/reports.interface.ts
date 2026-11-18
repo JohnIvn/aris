@@ -10,6 +10,9 @@ export interface ReportData {
   approval_stage: ArStatus;
   entries: ReportEntryData[];
   remarks: string;
+  submission_status?: string | null;
+  submission_notes?: string | null;
+  current_stage?: string | null;
   department_secretary_id: string | null;
   hr_id: string | null;
   accounting_id: string | null;
