@@ -36,8 +36,7 @@ export interface AuditLogItem {
   action: string;
   target: string;
   time: string;
-  result:
-    'Submitted' | 'Approved' | 'Rejected' | 'Flagged' | 'Missing' | 'Pending';
+  result: 'Approved' | 'Pending' | 'Rejected';
   stage?: string;
   stage_role?: string;
   stage_key?: string;
@@ -104,10 +103,12 @@ export class AuditService {
   // --- LIST AUDIT LOGS ---
   async list(filters: ListAuditDto) {
     try {
-      // 1. Fetch approval stages
+      // 1. Fetch approval stages (only the 4 canonical AR stages; the DTR
+      // rows duplicate the same labels and would double the pipeline)
       const stagesRes = await this.client.query(`
         SELECT id, stage_key, label, stage_order, is_active
           FROM approval_stages
+         WHERE stage_key LIKE 'AR-AP-STG-%'
          ORDER BY stage_order ASC
       `);
       const stagesMap = new Map<
@@ -224,14 +225,6 @@ export class AuditService {
         ORDER BY ds.updated_at DESC, d.shift_date DESC
       `);
 
-      // 5. Fetch all professors to detect missing submissions
-      const profsRes = await this.client.query(`
-        SELECT id, employee_id, email, firstname, lastname, department, position, is_banned
-          FROM user_professors
-         WHERE is_banned = FALSE
-         LIMIT 20
-      `);
-
       const auditLogs: AuditLogItem[] = [];
 
       // --- PROCESS ACCOMPLISHMENT REPORTS ---
@@ -288,13 +281,7 @@ export class AuditService {
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
 
         // Determine result and action
-        let result:
-          | 'Submitted'
-          | 'Approved'
-          | 'Rejected'
-          | 'Flagged'
-          | 'Missing'
-          | 'Pending' = 'Pending';
+        let result: 'Approved' | 'Rejected' | 'Pending' = 'Pending';
         let action = 'AR submitted';
 
         if (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks)) {
@@ -449,13 +436,7 @@ export class AuditService {
         const submissionStatus = String(
           first.submission_status || '',
         ).toLowerCase();
-        let result:
-          | 'Submitted'
-          | 'Approved'
-          | 'Rejected'
-          | 'Flagged'
-          | 'Missing'
-          | 'Pending' = 'Pending';
+        let result: 'Approved' | 'Rejected' | 'Pending' = 'Pending';
         let action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
 
         if (
@@ -510,38 +491,6 @@ export class AuditService {
           },
         });
       });
-
-      // --- ADD OVERDUE / MISSING AUDIT RECORDS FOR PROFESSORS WITHOUT RECENT AR ---
-      const submittedProfIds = new Set(arRes.rows.map((r: any) => r.user_id));
-      for (const prof of profsRes.rows) {
-        if (!submittedProfIds.has(prof.id) && auditLogs.length < 35) {
-          const profName = `${prof.firstname} ${prof.lastname}`.trim();
-          auditLogs.push({
-            id: `missing-${prof.id}`,
-            actor: profName,
-            init: getInitials(profName),
-            type: 'AR',
-            action: 'AR not submitted',
-            target: 'Overdue · Current Semester Cycle',
-            time: '08:00 AM',
-            result: 'Missing',
-            record: {
-              period: 'Current Academic Cycle',
-              reference: `AR-${prof.employee_id || '000'}-OVERDUE`,
-              facultyName: profName,
-              facultyNumber: prof.employee_id || '—',
-              college: prof.department || 'Academic Department',
-              email: prof.email,
-              userId: prof.id,
-              tables: [],
-              reviewer: 'HR & Academic Office',
-              reviewedAt: `${formatDate(new Date())} · 08:00 AM`,
-              remark:
-                'No Accomplishment Report has been filed for this cycle. Reminder notice dispatched to faculty and department head.',
-            },
-          });
-        }
-      }
 
       // --- FILTERING ---
       let filtered = auditLogs;
