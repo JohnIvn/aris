@@ -539,14 +539,12 @@ export class AuditService {
       // Compute stats
       const stats = {
         total: auditLogs.length,
-        submitted: auditLogs.filter(
-          (l) => l.result === 'Submitted' || l.result === 'Pending',
-        ).length,
+        submitted: auditLogs.filter((l) => l.result === 'Pending').length,
         pending: auditLogs.filter((l) => l.result === 'Pending').length,
         approved: auditLogs.filter((l) => l.result === 'Approved').length,
         rejected: auditLogs.filter((l) => l.result === 'Rejected').length,
-        flagged: auditLogs.filter((l) => l.result === 'Flagged').length,
-        missing: auditLogs.filter((l) => l.result === 'Missing').length,
+        flagged: 0,
+        missing: 0,
       };
 
       return SuccessHandler('Audit logs fetched successfully', 200, {
