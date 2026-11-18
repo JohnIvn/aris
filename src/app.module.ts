@@ -24,6 +24,7 @@ import { CurriculumModule } from './curriculum/curriculum.module';
 import { ApprovalsModule } from './approvals/approvals.module';
 import { BiometricsModule } from './biometrics/biometrics.module';
 import { OTAModule } from './ota/ota.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { OTAModule } from './ota/ota.module';
     ApprovalsModule,
     BiometricsModule,
     OTAModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],
