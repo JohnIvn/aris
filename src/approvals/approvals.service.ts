@@ -898,7 +898,8 @@ export class ApprovalsService {
 
           await this.client.query(
             `UPDATE accomplishment_reports
-                SET remarks = $1,
+                SET approval_stage = 'AR-AP-STG-1',
+                    remarks = $1,
                     payroll_availability = FALSE,
                     payroll_received = FALSE,
                     payroll_received_date = NULL,

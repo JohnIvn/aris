@@ -82,8 +82,28 @@ export class PayrollService {
     return merged;
   }
 
-  async fetchPayrolls(offset: number, limit: number) {
+  async fetchPayrolls(offset: number, limit: number, user?: UserSession) {
     try {
+      if (user?.role === 'staff') {
+        let pos = user.position;
+        if (!pos && user.id) {
+          const staffRes = await this.db.query(
+            'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
+            [user.id],
+          );
+          pos = staffRes.rows[0]?.position;
+        }
+        const lower = (pos || '').trim().toLowerCase();
+        const isAccounting =
+          lower.includes('account') || lower.includes('payroll');
+        if (!isAccounting) {
+          return ErrorHandler(
+            'Forbidden: Only Accounting staff can view payroll records',
+            403,
+          );
+        }
+      }
+
       const config = await this.getPayrollConfig();
 
       // 1. Fetch official recorded payroll from `payroll` table

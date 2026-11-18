@@ -47,10 +47,11 @@ export class PayrollController {
   @UseGuards(JwtCookieGuard)
   @Get()
   async fetchPayrolls(
+    @CurrentUser() user: UserSession,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
     @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
   ) {
-    return this.payrollService.fetchPayrolls(offset, limit);
+    return this.payrollService.fetchPayrolls(offset, limit, user);
   }
 
   @Roles('admin')
