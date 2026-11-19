@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { Roles } from '../lib/decorators/roles.decorator';
 import { JwtCookieGuard } from '../lib/guards/jwt.guard';
@@ -10,7 +10,9 @@ export class AdminController {
   @Roles('admin')
   @UseGuards(JwtCookieGuard)
   @Get()
-  fetchUsers() {
-    return this.adminService.fetchUsers();
+  fetchUsers(@Query('for') target?: string) {
+    return this.adminService.fetchUsers(
+      target === 'biometrics' ? 'biometrics' : 'authenticator',
+    );
   }
 }

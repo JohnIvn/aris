@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { DatabaseService } from '../database/database.service';
 
+export type FetchUsersFor = 'authenticator' | 'biometrics';
+
 @Injectable()
 export class AdminService {
   constructor(private readonly databaseServie: DatabaseService) {}
@@ -10,17 +12,22 @@ export class AdminService {
     return this.databaseServie.getClient();
   }
 
-  async fetchUsers() {
+  async fetchUsers(target: FetchUsersFor = 'authenticator') {
     try {
+      const linkTable =
+        target === 'biometrics' ? 'user_id_biometrics' : 'dtr_biometrics';
+
+      // NOT EXISTS instead of NOT IN: NOT IN returns zero rows if the subquery contains a NULL,
+      // and professor_id / staff_id are NULL on every row that belongs to the other role.
       const professor_response = await this.db.query(`
-        SELECT id, employee_id, username, firstname, lastname, email, position, department 
-        FROM user_professors
-        WHERE id NOT IN (SELECT professor_id FROM dtr_biometrics)`);
+        SELECT id, employee_id, username, firstname, lastname, email, position, department
+        FROM user_professors p
+        WHERE NOT EXISTS (SELECT 1 FROM ${linkTable} b WHERE b.professor_id = p.id)`);
 
       const staff_response = await this.db.query(`
-            SELECT id, employee_id, username, firstname, lastname, email, position, department 
-            FROM user_staffs
-            WHERE id NOT IN (SELECT staff_id FROM dtr_biometrics)`);
+        SELECT id, employee_id, username, firstname, lastname, email, position, department
+        FROM user_staffs s
+        WHERE NOT EXISTS (SELECT 1 FROM ${linkTable} b WHERE b.staff_id = s.id)`);
 
       return SuccessHandler('Successfully Fetched Professrs', 200, {
         professors: professor_response.rows,

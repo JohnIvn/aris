@@ -8,6 +8,7 @@ import {
   ClearAuthenticatorDto,
   EnrollBiometricDto,
 } from './dto/enroll-biometric.dto';
+import { AssignBiometricsDto } from './dto/assign-biometrics.dto';
 import { UserRoles } from '../lib/data/types';
 import { TransactionsDto } from './dto/biometrics-transactions.dto';
 import { UserSession } from '../lib/data/interfaces';
@@ -93,9 +94,12 @@ export class BiometricsService {
     if (error instanceof BiometricsError) {
       const status =
         error.code === 'user_not_found' ||
-        error.code === 'authenticator_not_found'
+        error.code === 'authenticator_not_found' ||
+        error.code === 'biometrics_not_found'
           ? 404
-          : error.code === 'authenticator_in_use'
+          : error.code === 'authenticator_in_use' ||
+              error.code === 'biometrics_already_assigned' ||
+              error.code === 'user_already_linked'
             ? 409
             : 400;
       return ErrorHandler(error.message, status, error.code);
@@ -660,6 +664,127 @@ export class BiometricsService {
     }
   }
 
+  /**
+   * Biometrics ids (from ZKTeco transactions) that are not linked to a professor/staff yet.
+   * Name/department/position come from the latest transaction of that id.
+   */
+  async getUnassignedBiometrics() {
+    try {
+      const result = await this.db.query(
+        `SELECT ub.biometrics_emp_id,
+                t.emp_code,
+                t.first_name,
+                t.last_name,
+                t.department,
+                t.position,
+                t.punch_time AS last_punch_time
+         FROM user_id_biometrics ub
+         LEFT JOIN LATERAL (
+           SELECT emp_code, first_name, last_name, department, position, punch_time
+           FROM attendance_transactions
+           WHERE emp = ub.biometrics_emp_id
+           ORDER BY punch_time DESC
+           LIMIT 1
+         ) t ON TRUE
+         WHERE ub.biometrics_emp_id IS NOT NULL
+           AND ub.professor_id IS NULL
+           AND ub.staff_id IS NULL
+         ORDER BY t.last_name, t.first_name`,
+      );
+
+      return SuccessHandler(
+        'Successfully fetched unassigned biometrics',
+        200,
+        result.rows,
+      );
+    } catch (error) {
+      return this.toError(error);
+    }
+  }
+
+  /**
+   * Admin: links an existing, unassigned biometrics_emp_id to a professor or staff.
+   * A user can only be linked to one biometrics id, and an id can only be linked once.
+   */
+  async assignBiometricsToUser(data: AssignBiometricsDto) {
+    const empId = String(data.biometrics_emp_id ?? '').trim();
+    const client = await this.db.connect();
+
+    try {
+      // user_id_biometrics.biometrics_emp_id is INT
+      if (!/^\d+$/.test(empId)) {
+        throw new BiometricsError(
+          'invalid_request',
+          "'biometrics_emp_id' must be a non-negative integer",
+        );
+      }
+
+      await client.query('BEGIN');
+      const col = await this.resolveUserColumn(data.user_id, client);
+
+      const target = await client.query<{
+        professor_id: string | null;
+        staff_id: string | null;
+      }>(
+        `SELECT professor_id, staff_id FROM user_id_biometrics
+         WHERE biometrics_emp_id = $1
+         FOR UPDATE`,
+        [empId],
+      );
+      if (!target.rows[0]) {
+        throw new BiometricsError(
+          'biometrics_not_found',
+          'Biometrics ID not found',
+        );
+      }
+      if (target.rows[0].professor_id || target.rows[0].staff_id) {
+        throw new BiometricsError(
+          'biometrics_already_assigned',
+          'This biometrics ID is already assigned to a user',
+        );
+      }
+
+      const linked = await client.query(
+        `SELECT 1 FROM user_id_biometrics WHERE ${col} = $1 LIMIT 1`,
+        [data.user_id],
+      );
+      if (linked.rows.length) {
+        throw new BiometricsError(
+          'user_already_linked',
+          'This user is already linked to a biometrics ID',
+        );
+      }
+
+      await client.query(
+        `UPDATE user_id_biometrics SET ${col} = $2 WHERE biometrics_emp_id = $1`,
+        [empId, data.user_id],
+      );
+
+      await client.query('COMMIT');
+
+      void this.loggerService.logSystemEvent({
+        actor_label: 'Admin',
+        kind: 'security',
+        event: 'Biometrics ID Assigned',
+        detail: `Biometrics ID ${empId} assigned to ${col} ${data.user_id}`,
+      });
+
+      return SuccessHandler('Biometrics ID assigned successfully', 200, {
+        biometrics_emp_id: empId,
+        [col]: data.user_id,
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      return this.toError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Admin: all transactions. Professor/staff: only transactions of the biometrics id assigned to them.
+   * Each row carries the assigned user's data (null while the id is unassigned).
+   */
   async getBiometricsTransactions(
     user: UserSession,
     page = 1,
@@ -669,14 +794,14 @@ export class BiometricsService {
     endDate?: string,
   ) {
     try {
-      const role = user.role;
+      const isAdmin = user.role === 'admin';
       const offset = (page - 1) * limit;
 
       const conditions: string[] = [];
       const values: any[] = [];
 
-      // Restrict non-admin users to their own biometric employee ID.
-      if (role !== 'admin') {
+      // Restrict non-admin users to their own assigned biometrics ID.
+      if (!isAdmin) {
         const userEmpResult = await this.db.query(
           `
         SELECT biometrics_emp_id
@@ -705,23 +830,23 @@ export class BiometricsService {
         }
 
         values.push(userEmpId);
-        conditions.push(`emp = $${values.length}`);
+        conditions.push(`t.emp = $${values.length}`);
       }
 
       // Optional filters
       if (empCode) {
         values.push(empCode);
-        conditions.push(`emp_code = $${values.length}`);
+        conditions.push(`t.emp_code = $${values.length}`);
       }
 
       if (startDate) {
         values.push(startDate);
-        conditions.push(`punch_time >= $${values.length}`);
+        conditions.push(`t.punch_time >= $${values.length}`);
       }
 
       if (endDate) {
         values.push(endDate);
-        conditions.push(`punch_time <= $${values.length}`);
+        conditions.push(`t.punch_time <= $${values.length}`);
       }
 
       const whereClause = conditions.length
@@ -732,7 +857,7 @@ export class BiometricsService {
       const countResult = await this.db.query(
         `
       SELECT COUNT(*)::INTEGER AS total
-      FROM attendance_transactions
+      FROM attendance_transactions t
       ${whereClause}
       `,
         values,
@@ -745,10 +870,23 @@ export class BiometricsService {
 
       const result = await this.db.query(
         `
-      SELECT *
-      FROM attendance_transactions
+      SELECT t.*,
+             (ub.professor_id IS NOT NULL OR ub.staff_id IS NOT NULL) AS is_assigned,
+             COALESCE(ub.professor_id, ub.staff_id) AS user_id,
+             CASE WHEN ub.professor_id IS NOT NULL THEN 'professor'
+                  WHEN ub.staff_id IS NOT NULL THEN 'staff' END AS user_type,
+             COALESCE(p.employee_id, s.employee_id) AS user_employee_id,
+             TRIM(CONCAT(COALESCE(p.firstname, s.firstname), ' ', COALESCE(p.lastname, s.lastname))) AS user_name,
+             COALESCE(p.email, s.email) AS user_email,
+             COALESCE(p.department, s.department) AS user_department,
+             COALESCE(p.position, s.position) AS user_position,
+             COALESCE(p.avatar_url, s.avatar_url) AS user_avatar_url
+      FROM attendance_transactions t
+      LEFT JOIN user_id_biometrics ub ON ub.biometrics_emp_id = t.emp
+      LEFT JOIN user_professors p ON ub.professor_id = p.id
+      LEFT JOIN user_staffs s ON ub.staff_id = s.id
       ${whereClause}
-      ORDER BY punch_time DESC
+      ORDER BY t.punch_time DESC
       LIMIT $${queryValues.length - 1}
       OFFSET $${queryValues.length}
       `,
@@ -773,6 +911,8 @@ export class BiometricsService {
 
   async recordTransactions(transactionDto: TransactionsDto) {
     try {
+      // Unknown biometrics ID: register it with no professor_id/staff_id.
+      // The admin links it to a user later through assignBiometricsToUser.
       await this.db.query(
         `INSERT INTO user_id_biometrics (
           biometrics_emp_id

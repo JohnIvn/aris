@@ -19,8 +19,10 @@ import {
   EnrollBiometricDto,
   PunchDto,
 } from './dto/enroll-biometric.dto';
+import { AssignBiometricsDto } from './dto/assign-biometrics.dto';
 import { SuccessHandler } from '../lib/utils/handlers';
 import { CurrentUser } from '../lib/decorators/cookie-decorator';
+import { Roles } from '../lib/decorators/roles.decorator';
 import { type UserSession } from '../lib/data/interfaces';
 
 interface AuthedRequest {
@@ -94,6 +96,20 @@ export class BiometricsController {
       }
       throw e;
     }
+  }
+
+  // ZKTeco: biometrics ids that exist but are not linked to any professor/staff yet
+  @Roles('admin')
+  @Get('unassigned')
+  getUnassignedBiometrics() {
+    return this.biometricsService.getUnassignedBiometrics();
+  }
+
+  // ZKTeco: link a biometrics_emp_id to a professor/staff
+  @Roles('admin')
+  @Post('assign')
+  assignBiometricsToUser(@Body() data: AssignBiometricsDto) {
+    return this.biometricsService.assignBiometricsToUser(data);
   }
 
   @UseGuards(JwtCookieGuard)
