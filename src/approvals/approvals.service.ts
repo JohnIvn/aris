@@ -208,17 +208,23 @@ export class ApprovalsService {
           ar.payroll_received_date,
           ar.created_at,
           ar.updated_at,
-          COALESCE(up.firstname || ' ' || up.lastname, us.firstname || ' ' || us.lastname, 'Faculty ' || ar.faculty_no) AS faculty_name,
-          COALESCE(up.department, us.department, 'Academic Department') AS department,
-          COALESCE(up.position, us.position, 'Professor') AS faculty_rank,
-          COALESCE(up.email, us.email, 'faculty@aris.edu.ph') AS email,
+          COALESCE(NULLIF(TRIM(up.firstname || ' ' || up.lastname), ''), NULLIF(TRIM(us.firstname || ' ' || us.lastname), ''), 'Faculty ' || COALESCE(ar.faculty_no, ar.employee_id, '')) AS faculty_name,
+          COALESCE(up.department, us.department, '') AS department,
+          COALESCE(up.position, us.position, '') AS faculty_rank,
+          COALESCE(up.email, us.email, '') AS email,
           ar.submission_status,
           ar.submission_event,
-          ar.current_stage AS submission_stage
+          ar.submission_topics,
+          ar.submission_notes,
+          ar.submission_payload,
+          ar.current_stage AS submission_stage,
+          COALESCE(NULLIF(TRIM(rev_staff.firstname || ' ' || rev_staff.lastname), ''), NULLIF(TRIM(rev_prof.firstname || ' ' || rev_prof.lastname), ''), ast.label) AS reviewer_name
         FROM accomplishment_reports ar
         LEFT JOIN approval_stages ast ON ast.stage_key = ar.approval_stage
         LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
         LEFT JOIN user_staffs us ON us.id = ar.user_id OR us.employee_id = ar.employee_id
+        LEFT JOIN user_staffs rev_staff ON rev_staff.id = ar.reviewed_by
+        LEFT JOIN user_professors rev_prof ON rev_prof.id = ar.reviewed_by
         ORDER BY ar.updated_at DESC, ar.created_at DESC
       `);
 
@@ -282,8 +288,9 @@ export class ApprovalsService {
           d.time_out,
           d.total_hours,
           d.created_at,
-          COALESCE(up.firstname || ' ' || up.lastname, 'Faculty') AS professor_name,
-          COALESCE(up.department, 'Academic Department') AS department,
+          COALESCE(NULLIF(TRIM(up.firstname || ' ' || up.lastname), ''), 'Faculty') AS professor_name,
+          COALESCE(up.department, '') AS department,
+          COALESCE(up.email, '') AS email,
           up.employee_id
         FROM dtr_submissions ds
         JOIN dtr_submission_entries dse ON dse.submission_id = ds.id
@@ -300,49 +307,85 @@ export class ApprovalsService {
         const entries = entriesByReport.get(ar.id) || [];
         const entryCount = entries.length;
 
-        const courseGroups = new Map<string, any[]>();
-        entries.forEach((e) => {
-          const key = `${e.course || 'COURSE'} — ${e.code || ''}`.trim();
-          if (!courseGroups.has(key)) courseGroups.set(key, []);
-          courseGroups.get(key)!.push(e);
-        });
+        let tables: ApprovalRecordTable[] = [];
+        let payload: any = null;
+        if (ar.submission_payload) {
+          try {
+            payload =
+              typeof ar.submission_payload === 'string'
+                ? JSON.parse(ar.submission_payload)
+                : ar.submission_payload;
+            if (Array.isArray(payload?.tables) && payload.tables.length > 0) {
+              tables = payload.tables;
+            }
+          } catch {}
+        }
 
-        const tables: ApprovalRecordTable[] = [];
-        courseGroups.forEach((groupEntries, key) => {
-          const startDate = groupEntries[0]?.class_date
-            ? formatDate(groupEntries[0].class_date)
-            : '';
-          const endDate = groupEntries[groupEntries.length - 1]?.class_date
-            ? formatDate(groupEntries[groupEntries.length - 1].class_date)
-            : '';
-          const meta =
-            startDate && endDate
-              ? `${startDate} – ${endDate}`
-              : `${groupEntries.length} sessions`;
-
-          const rows = groupEntries.map((e) => [
-            e.code || '—',
-            `${e.program || 'BSIT'} ${e.year || 1}${e.section || 'A'}`,
-            Number(e.units) || 3,
-            e.day || 'MON',
-            `${e.shift_start ? String(e.shift_start).slice(0, 5) : '08:00'}–${e.shift_end ? String(e.shift_end).slice(0, 5) : '11:00'}`,
-            (e.campus || 'congress').toUpperCase(),
-          ]);
-
-          tables.push({
-            title: key,
-            meta,
-            columns: AR_COLUMNS,
-            rows,
+        if (tables.length === 0) {
+          const courseGroups = new Map<string, any[]>();
+          entries.forEach((e) => {
+            const key = `${e.course || e.code || 'Course'}`.trim();
+            if (!courseGroups.has(key)) courseGroups.set(key, []);
+            courseGroups.get(key)!.push(e);
           });
-        });
 
-        const topics = Array.from(
-          new Set(entries.map((e) => e.topics).filter(Boolean)),
-        ).join('\n');
-        const tasks = Array.from(
-          new Set(entries.map((e) => e.description).filter(Boolean)),
-        ).join('\n');
+          courseGroups.forEach((groupEntries, key) => {
+            const startDate = groupEntries[0]?.class_date
+              ? formatDate(groupEntries[0].class_date)
+              : '';
+            const endDate = groupEntries[groupEntries.length - 1]?.class_date
+              ? formatDate(groupEntries[groupEntries.length - 1].class_date)
+              : '';
+            const meta =
+              startDate && endDate
+                ? `${startDate} – ${endDate}`
+                : `${groupEntries.length} sessions`;
+
+            const rows = groupEntries.map((e) => {
+              const progYearSec = [
+                e.program,
+                e.year && e.section
+                  ? `${e.year}${e.section}`
+                  : e.section || (e.year ? String(e.year) : ''),
+              ]
+                .filter(Boolean)
+                .join(' ') || '—';
+
+              const startTime = e.shift_start ? String(e.shift_start).slice(0, 5) : '';
+              const endTime = e.shift_end ? String(e.shift_end).slice(0, 5) : '';
+              const timeDisplay =
+                startTime && endTime
+                  ? `${startTime}–${endTime}`
+                  : startTime || endTime || '—';
+
+              return [
+                e.code || '—',
+                progYearSec,
+                e.units !== null && e.units !== undefined ? e.units : '—',
+                e.day || '—',
+                timeDisplay,
+                e.campus ? String(e.campus).toUpperCase() : '—',
+              ];
+            });
+
+            tables.push({
+              title: key,
+              meta,
+              columns: AR_COLUMNS,
+              rows,
+            });
+          });
+        }
+
+        const topics =
+          Array.from(new Set(entries.map((e) => e.topics).filter(Boolean))).join('\n') ||
+          ar.submission_topics ||
+          payload?.topics ||
+          '';
+        const tasks =
+          Array.from(new Set(entries.map((e) => e.description).filter(Boolean))).join('\n') ||
+          payload?.tasks ||
+          '';
 
         const periodStr = `${formatDate(ar.period_start)} – ${formatDate(ar.period_end)}`;
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
@@ -398,13 +441,8 @@ export class ApprovalsService {
         }
 
         const reviewer =
-          stage === 'Checker'
-            ? 'Prof. R. Alonzo (Checker)'
-            : stage === 'Secretary'
-              ? 'L. Bautista (Secretary)'
-              : stage === 'HR'
-                ? 'Ana Bautista (HR)'
-                : 'Payroll Office (Accounting)';
+          ar.reviewer_name ||
+          (stage ? `${stage} Reviewer` : 'Reviewer');
 
         const reviewedAt = `${formatDate(ar.updated_at || ar.created_at)} · ${formatTime(ar.updated_at || ar.created_at)}`;
         const submitted = `${formatDate(ar.created_at)} · ${formatTime(ar.created_at)}`;
@@ -425,14 +463,10 @@ export class ApprovalsService {
             reference: refStr,
             facultyName: ar.faculty_name,
             facultyNumber: ar.faculty_no || '—',
-            college: ar.department,
+            college: ar.department || '—',
             tables,
-            topics:
-              topics ||
-              'Curriculum delivery, student mentorship, and laboratory activities.',
-            tasks:
-              tasks ||
-              'Conducted scheduled lectures, prepared modules, and submitted grade records.',
+            topics: topics || '—',
+            tasks: tasks || '—',
             notes: isDisapproved
               ? ar.remarks || 'Returned to faculty for correction.'
               : isResubmitted
@@ -441,7 +475,7 @@ export class ApprovalsService {
                   ? ar.remarks
                   : 'Resubmitted with corrections. Pending review.'
                 : ar.remarks || undefined,
-            attachment: `${ar.faculty_name.replace(/[^a-zA-Z]/g, '')}_AR_${periodStr.replace(/\s+/g, '_')}.pdf · 1.2 MB`,
+            attachment: payload?.attachment || ar.attachment_name || undefined,
             reviewer,
             reviewedAt,
             remark: isDisapproved
@@ -538,12 +572,10 @@ export class ApprovalsService {
             reference,
             facultyName: first.professor_name || 'Faculty Member',
             facultyNumber: first.employee_id || '—',
-            college: first.department || 'Academic Department',
+            college: first.department || '—',
             tables,
             notes: `Total duty hours rendered: ${totalHours} hrs across ${daysLogged} working days.`,
-            attachment:
-              first.attachment_name ||
-              `${(first.professor_name || 'Faculty').replace(/[^a-zA-Z]/g, '')}_DTR.xlsx`,
+            attachment: first.attachment_name || undefined,
             reviewer: first.stage_label || stage,
             reviewedAt: `${formatDate(first.submitted_at)} · ${formatTime(first.submitted_at)}`,
             remark:
@@ -802,7 +834,7 @@ export class ApprovalsService {
             const periodStr =
               arInfo.period_start && arInfo.period_end
                 ? `${formatDate(arInfo.period_start)} – ${formatDate(arInfo.period_end)}`
-                : 'September Cycle 1';
+                : `${formatDate(new Date())}`;
             const unitsStr = `${totalHours.toFixed(1)} hrs (${entriesRes.rows.length || 1} outputs)`;
 
             // Put on payroll records
@@ -1009,7 +1041,7 @@ export class ApprovalsService {
         const periodStr =
           first && last && first.shift_date && last.shift_date
             ? `${formatDate(last.shift_date)} – ${formatDate(first.shift_date)}`
-            : 'September Cycle 1';
+            : `${formatDate(new Date())}`;
         const unitsStr = `${daysLogged} days (${totalHours.toFixed(1)} hrs)`;
 
         const meta = JSON.stringify({
