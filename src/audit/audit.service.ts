@@ -135,6 +135,13 @@ export class AuditService {
           COALESCE(ast.label, ar.approval_stage) AS stage_label,
           COALESCE(ast.stage_order, 1) AS stage_order,
           ar.remarks,
+          ar.submission_status,
+          ar.submission_event,
+          ar.submission_notes,
+          ar.reviewed_by,
+          ar.reviewed_at,
+          ar.current_stage,
+          ar.current_since,
           ar.payroll_availability,
           ar.payroll_received,
           ar.payroll_received_date,
@@ -285,9 +292,11 @@ export class AuditService {
         let action = 'AR submitted';
 
         const isDisapproved =
+          ar.submission_status === 'declined' ||
           ar.submission_status === 'disapproved' ||
           ar.submission_status === 'rejected' ||
-          (ar.remarks && /reject|disapprov|return|flag/i.test(ar.remarks));
+          (ar.remarks && /decline|reject|disapprov|return|flag/i.test(ar.remarks)) ||
+          (ar.submission_notes && /decline|reject|disapprov|return|flag/i.test(ar.submission_notes));
 
         if (isDisapproved) {
           result = 'Rejected';
@@ -330,15 +339,17 @@ export class AuditService {
 
         const target = `${periodStr} · ${entryCount} outputs`;
         const reviewer =
-          stageRole === 'Checker'
+          ar.reviewed_by ||
+          (stageRole === 'Checker'
             ? 'Faculty Checker'
             : stageRole === 'Secretary'
               ? 'College Secretary'
               : stageRole === 'HR'
                 ? 'Human Resources'
-                : 'Payroll Office';
+                : 'Payroll Office');
 
         const remarkText =
+          ar.submission_notes ||
           ar.remarks ||
           `Current Stage: ${stageRole} (${ar.approval_stage}) · ${
             result === 'Approved'
@@ -445,6 +456,7 @@ export class AuditService {
         let action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
 
         if (
+          submissionStatus === 'declined' ||
           submissionStatus === 'rejected' ||
           submissionStatus === 'disapproved'
         ) {
