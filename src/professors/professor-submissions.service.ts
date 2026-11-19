@@ -629,6 +629,132 @@ export class ProfessorSubmissionsService {
     }
   }
 
+  async getAccomplishmentReports(
+    user?: UserSession,
+    emailQuery?: string,
+  ): Promise<any[]> {
+    try {
+      const prof = await this.resolveProfessor(user, emailQuery);
+      const profId = prof?.id || user?.id || null;
+      const employeeId = prof?.employee_id || null;
+      const profEmail = (prof?.email || emailQuery || user?.email || '')
+        .toLowerCase()
+        .trim();
+
+      // 1. Query accomplishment_reports table directly
+      let dbReports: any[] = [];
+      try {
+        let query = `
+          SELECT ar.*,
+                 up.firstname,
+                 up.lastname,
+                 up.email AS professor_email
+            FROM accomplishment_reports ar
+            LEFT JOIN user_professors up ON ar.user_id = up.id
+        `;
+        const params: unknown[] = [];
+        const conds: string[] = [];
+
+        if (profId) {
+          params.push(profId);
+          conds.push(`ar.user_id = $${params.length}`);
+        }
+        if (employeeId) {
+          params.push(employeeId);
+          conds.push(
+            `(ar.employee_id = $${params.length} OR ar.faculty_no = $${params.length})`,
+          );
+        }
+        if (profEmail) {
+          params.push(profEmail);
+          conds.push(`LOWER(up.email) = LOWER($${params.length})`);
+        }
+
+        if (conds.length > 0) {
+          query += ` WHERE (${conds.join(' OR ')}) `;
+        }
+
+        query += ` ORDER BY ar.submitted_at DESC NULLS LAST, ar.created_at DESC LIMIT 50`;
+        const res = await this.client.query(query, params);
+        dbReports = res.rows.map((row: any) => {
+          const payload = row.submission_payload || {};
+          const period =
+            payload.period ||
+            row.remarks ||
+            'Current Cycle';
+          return {
+            id: row.id,
+            type: 'AR',
+            period,
+            units:
+              row.submission_units ||
+              `${payload.tables?.length || 1} courses`,
+            submitted:
+              row.submitted_at ||
+              row.created_at ||
+              formatDisplayDate(new Date()),
+            created_at: row.created_at,
+            submitted_at: row.submitted_at,
+            status: row.submission_status
+              ? row.submission_status.charAt(0).toUpperCase() +
+                row.submission_status.slice(1).toLowerCase()
+              : 'Pending',
+            stage: row.current_stage || 'Checker',
+            currentStage: row.current_stage || 'Checker',
+            event:
+              row.submission_event || `AR submitted · ${period}`,
+            record: {
+              ...payload,
+              id: row.id,
+              period,
+              reference:
+                row.submission_reference || payload.reference || row.id,
+              created_at: row.created_at,
+              submitted_at: row.submitted_at,
+            },
+          };
+        });
+      } catch (dbErr) {
+        console.warn(
+          '[ProfessorSubmissionsService] Error fetching accomplishment_reports table:',
+          dbErr,
+        );
+      }
+
+      // 2. Query audit logs for AR submissions
+      const submissions = await this.getSubmissions(user, emailQuery);
+      const arSubmissions = submissions.filter((s) => s.type === 'AR');
+
+      // 3. Deduplicate and merge by reference or id
+      const seen = new Set<string>();
+      const combined: any[] = [];
+
+      for (const item of dbReports) {
+        const key = item.record?.reference || item.id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          combined.push(item);
+        }
+      }
+
+      for (const item of arSubmissions) {
+        const key = item.record?.reference || item.id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          combined.push(item);
+        }
+      }
+
+      return combined.length > 0 ? combined : dbReports;
+    } catch (error) {
+      console.error(
+        '[ProfessorSubmissionsService] getAccomplishmentReports error:',
+        error,
+      );
+      return [];
+    }
+  }
+
   async getLatestSubmission(
     user?: UserSession,
     emailQuery?: string,
