@@ -103,10 +103,11 @@ function parseSection(sectionValue: string): {
       section: section,
     };
   }
+  const parts = section.split(/\s+/);
   return {
-    program: 'BSIT',
-    year: 2,
-    section: section || 'N/A',
+    program: parts[0] || '',
+    year: 1,
+    section: section || '—',
   };
 }
 
@@ -477,31 +478,41 @@ export class ProfessorSubmissionsService {
 
         if (reportId && Array.isArray(recordPayload.tables)) {
           for (const tbl of recordPayload.tables) {
-            const courseTitle = tbl.title || 'General Course';
+            const courseTitle = tbl.title || 'Course';
             const courseTopics =
-              tbl.topics || recordPayload.topics || 'Course syllabus alignment';
+              tbl.topics || recordPayload.topics || '';
             const courseTasks =
               tbl.tasks ||
               recordPayload.tasks ||
-              'Lecture and Discussion, Activity';
+              '';
             if (Array.isArray(tbl.rows)) {
               for (const row of tbl.rows) {
-                const code = String(row[0] || 'CC 105');
-                const section = String(row[1] || 'BSIT 2A');
+                const code = String(row[0] || '').trim();
+                const section = String(row[1] || '').trim();
                 const sectionInfo = parseSection(section);
-                const unitVal = parseInt(row[2], 10) || 3;
-                const day = String(row[3] || 'Monday');
-                const timeStr = String(row[4] || '08:00AM–11:00AM');
-                const campusVal = parseCampus(String(row[5] || 'congress'));
+                const unitVal = parseInt(row[2], 10) || 0;
+                const day = String(row[3] || '');
+                const timeStr = String(row[4] || '');
+                const campusVal = parseCampus(String(row[5] || ''));
 
                 const [startRaw, endRaw] = timeStr.includes('–')
                   ? timeStr.split('–')
                   : timeStr.includes('-')
                     ? timeStr.split('-')
-                    : [timeStr, '11:00AM'];
+                    : [timeStr, ''];
 
                 const shiftStart = parseSqlTime(startRaw, '08:00:00');
                 const shiftEnd = parseSqlTime(endRaw, '11:00:00');
+
+                let calculatedHours = 3.0;
+                if (shiftStart && shiftEnd) {
+                  const [sh, sm] = shiftStart.split(':').map(Number);
+                  const [eh, em] = shiftEnd.split(':').map(Number);
+                  const diff = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+                  if (diff > 0) calculatedHours = diff / 60;
+                } else if (unitVal > 0) {
+                  calculatedHours = Number(unitVal);
+                }
 
                 await this.client.query(
                   `
@@ -509,8 +520,8 @@ export class ProfessorSubmissionsService {
                     report_id, course, code, program, year, section, units, day,
                     shift_hours, shift_start, shift_end, campus, class_date, topics, description
                   ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, 3.0, $9, $10,
-                    $11, CURRENT_DATE, $12, $13
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                    $12, CURRENT_DATE, $13, $14
                   )
                   `,
                   [
@@ -522,6 +533,7 @@ export class ProfessorSubmissionsService {
                     sectionInfo.section,
                     unitVal,
                     day,
+                    calculatedHours,
                     shiftStart,
                     shiftEnd,
                     campusVal,

@@ -138,6 +138,8 @@ export class AuditService {
           ar.submission_status,
           ar.submission_event,
           ar.submission_notes,
+          ar.submission_topics,
+          ar.submission_payload,
           ar.reviewed_by,
           ar.reviewed_at,
           ar.current_stage,
@@ -147,14 +149,17 @@ export class AuditService {
           ar.payroll_received_date,
           ar.created_at,
           ar.updated_at,
-          COALESCE(up.firstname || ' ' || up.lastname, us.firstname || ' ' || us.lastname, 'Faculty ' || ar.faculty_no) AS faculty_name,
-          COALESCE(up.department, us.department, 'Academic Department') AS department,
-          COALESCE(up.position, us.position, 'Professor') AS faculty_rank,
-          COALESCE(up.email, us.email, 'faculty@aris.edu.ph') AS email
+          COALESCE(NULLIF(TRIM(up.firstname || ' ' || up.lastname), ''), NULLIF(TRIM(us.firstname || ' ' || us.lastname), ''), 'Faculty ' || COALESCE(ar.faculty_no, ar.employee_id, '')) AS faculty_name,
+          COALESCE(up.department, us.department, '') AS department,
+          COALESCE(up.position, us.position, '') AS faculty_rank,
+          COALESCE(up.email, us.email, '') AS email,
+          COALESCE(NULLIF(TRIM(rev_staff.firstname || ' ' || rev_staff.lastname), ''), NULLIF(TRIM(rev_prof.firstname || ' ' || rev_prof.lastname), ''), ast.label) AS reviewer_name
         FROM accomplishment_reports ar
         LEFT JOIN approval_stages ast ON ast.stage_key = ar.approval_stage
         LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
         LEFT JOIN user_staffs us ON us.id = ar.user_id OR us.employee_id = ar.employee_id
+        LEFT JOIN user_staffs rev_staff ON rev_staff.id = ar.reviewed_by
+        LEFT JOIN user_professors rev_prof ON rev_prof.id = ar.reviewed_by
         ORDER BY ar.updated_at DESC, ar.created_at DESC
       `);
 
@@ -220,10 +225,10 @@ export class AuditService {
           d.shift_date,
           d.created_at,
           d.updated_at,
-          COALESCE(up.firstname || ' ' || up.lastname, 'Faculty') AS faculty_name,
+          COALESCE(NULLIF(TRIM(up.firstname || ' ' || up.lastname), ''), 'Faculty') AS faculty_name,
           up.employee_id,
-          up.department,
-          up.email
+          COALESCE(up.department, '') AS department,
+          COALESCE(up.email, '') AS email
         FROM dtr_submissions ds
         JOIN dtr_submission_entries dse ON dse.submission_id = ds.id
         JOIN dtr d ON d.id = dse.dtr_id
@@ -239,50 +244,85 @@ export class AuditService {
         const entries = entriesByReport.get(ar.id) || [];
         const entryCount = entries.length;
 
-        // Build course tables for this AR
-        const courseGroups = new Map<string, any[]>();
-        entries.forEach((e) => {
-          const key = `${e.course || 'COURSE'} — ${e.code || ''}`.trim();
-          if (!courseGroups.has(key)) courseGroups.set(key, []);
-          courseGroups.get(key)!.push(e);
-        });
+        let tables: AuditRecordTable[] = [];
+        let payload: any = null;
+        if (ar.submission_payload) {
+          try {
+            payload =
+              typeof ar.submission_payload === 'string'
+                ? JSON.parse(ar.submission_payload)
+                : ar.submission_payload;
+            if (Array.isArray(payload?.tables) && payload.tables.length > 0) {
+              tables = payload.tables;
+            }
+          } catch {}
+        }
 
-        const tables: AuditRecordTable[] = [];
-        courseGroups.forEach((groupEntries, key) => {
-          const startDate = groupEntries[0]?.class_date
-            ? formatDate(groupEntries[0].class_date)
-            : '';
-          const endDate = groupEntries[groupEntries.length - 1]?.class_date
-            ? formatDate(groupEntries[groupEntries.length - 1].class_date)
-            : '';
-          const meta =
-            startDate && endDate
-              ? `${startDate} – ${endDate}`
-              : `${groupEntries.length} sessions`;
-
-          const rows = groupEntries.map((e) => [
-            e.code || '—',
-            `${e.program || 'BSIT'} ${e.year || 1}${e.section || 'A'}`,
-            Number(e.units) || 3,
-            e.day || 'MON',
-            `${e.shift_start ? String(e.shift_start).slice(0, 5) : '08:00'}–${e.shift_end ? String(e.shift_end).slice(0, 5) : '11:00'}`,
-            (e.campus || 'congress').toUpperCase(),
-          ]);
-
-          tables.push({
-            title: key,
-            meta,
-            columns: AR_COLUMNS,
-            rows,
+        if (tables.length === 0) {
+          const courseGroups = new Map<string, any[]>();
+          entries.forEach((e) => {
+            const key = `${e.course || e.code || 'Course'}`.trim();
+            if (!courseGroups.has(key)) courseGroups.set(key, []);
+            courseGroups.get(key)!.push(e);
           });
-        });
 
-        const topics = Array.from(
-          new Set(entries.map((e) => e.topics).filter(Boolean)),
-        ).join('\n');
-        const tasks = Array.from(
-          new Set(entries.map((e) => e.description).filter(Boolean)),
-        ).join('\n');
+          courseGroups.forEach((groupEntries, key) => {
+            const startDate = groupEntries[0]?.class_date
+              ? formatDate(groupEntries[0].class_date)
+              : '';
+            const endDate = groupEntries[groupEntries.length - 1]?.class_date
+              ? formatDate(groupEntries[groupEntries.length - 1].class_date)
+              : '';
+            const meta =
+              startDate && endDate
+                ? `${startDate} – ${endDate}`
+                : `${groupEntries.length} sessions`;
+
+            const rows = groupEntries.map((e) => {
+              const progYearSec = [
+                e.program,
+                e.year && e.section
+                  ? `${e.year}${e.section}`
+                  : e.section || (e.year ? String(e.year) : ''),
+              ]
+                .filter(Boolean)
+                .join(' ') || '—';
+
+              const startTime = e.shift_start ? String(e.shift_start).slice(0, 5) : '';
+              const endTime = e.shift_end ? String(e.shift_end).slice(0, 5) : '';
+              const timeDisplay =
+                startTime && endTime
+                  ? `${startTime}–${endTime}`
+                  : startTime || endTime || '—';
+
+              return [
+                e.code || '—',
+                progYearSec,
+                e.units !== null && e.units !== undefined ? e.units : '—',
+                e.day || '—',
+                timeDisplay,
+                e.campus ? String(e.campus).toUpperCase() : '—',
+              ];
+            });
+
+            tables.push({
+              title: key,
+              meta,
+              columns: AR_COLUMNS,
+              rows,
+            });
+          });
+        }
+
+        const topics =
+          Array.from(new Set(entries.map((e) => e.topics).filter(Boolean))).join('\n') ||
+          ar.submission_topics ||
+          payload?.topics ||
+          '';
+        const tasks =
+          Array.from(new Set(entries.map((e) => e.description).filter(Boolean))).join('\n') ||
+          payload?.tasks ||
+          '';
 
         const periodStr = `${formatDate(ar.period_start)} – ${formatDate(ar.period_end)}`;
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
@@ -339,14 +379,9 @@ export class AuditService {
 
         const target = `${periodStr} · ${entryCount} outputs`;
         const reviewer =
+          ar.reviewer_name ||
           ar.reviewed_by ||
-          (stageRole === 'Checker'
-            ? 'Faculty Checker'
-            : stageRole === 'Secretary'
-              ? 'College Secretary'
-              : stageRole === 'HR'
-                ? 'Human Resources'
-                : 'Payroll Office');
+          (stageRole ? `${stageRole} Reviewer` : 'Reviewer');
 
         const remarkText =
           ar.submission_notes ||
@@ -378,18 +413,14 @@ export class AuditService {
             reference: refStr,
             facultyName: ar.faculty_name,
             facultyNumber: ar.faculty_no || '—',
-            college: ar.department,
+            college: ar.department || '—',
             email: ar.email,
             userId: ar.user_id,
             tables,
-            topics:
-              topics ||
-              'Curriculum delivery, student mentorship, and laboratory activities.',
-            tasks:
-              tasks ||
-              'Conducted scheduled lectures, prepared modules, and submitted grade records.',
+            topics: topics || '—',
+            tasks: tasks || '—',
             notes: ar.remarks || undefined,
-            attachment: `${ar.faculty_name.replace(/[^a-zA-Z]/g, '')}_Accomplishment_Report.pdf · 1.4 MB`,
+            attachment: payload?.attachment || ar.attachment_name || undefined,
             reviewer,
             reviewedAt: `${formatDate(ar.updated_at || ar.created_at)} · ${formatTime(ar.updated_at || ar.created_at)}`,
             remark: remarkText,
@@ -495,14 +526,12 @@ export class AuditService {
             reference: refStr,
             facultyName: first.faculty_name,
             facultyNumber: first.employee_id || '—',
-            college: first.department || 'Academic Department',
+            college: first.department || '—',
             email: first.email,
             userId: first.professor_id,
             tables,
-            attachment:
-              first.attachment_name ||
-              `DTR_${first.faculty_name.replace(/[^a-zA-Z]/g, '')}_Logged.xlsx`,
-            reviewer: first.stage_label || 'Faculty Checker',
+            attachment: first.attachment_name || undefined,
+            reviewer: first.stage_label || 'Reviewer',
             reviewedAt: `${formatDate(first.submitted_at || first.submission_updated_at || first.submission_created_at)} · ${formatTime(first.submitted_at || first.submission_updated_at || first.submission_created_at)}`,
             remark: first.remarks || 'Submitted for review.',
           },
