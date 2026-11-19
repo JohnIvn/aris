@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
@@ -42,6 +42,42 @@ function formatDisplayDate(d: Date | string | null): string {
   });
 }
 
+function getHalfMonthRange(periodText: string): {
+  periodStart: string;
+  periodEnd: string;
+} | null {
+  const match = periodText.match(
+    /^([A-Za-z]+)\s+(\d{4})\s+(I|II)$/i,
+  );
+  if (!match) return null;
+
+  const months = [
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+  ];
+  const monthIndex = months.indexOf(match[1].toLowerCase());
+  if (monthIndex < 0) return null;
+
+  const year = Number(match[2]);
+  const half = match[3].toUpperCase();
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  const month = String(monthIndex + 1).padStart(2, '0');
+  return {
+    periodStart: `${year}-${month}-${half === 'I' ? '01' : '16'}`,
+    periodEnd: `${year}-${month}-${half === 'I' ? '15' : String(lastDay).padStart(2, '0')}`,
+  };
+}
+
 function parseCampus(
   c: string | undefined,
 ): 'south' | 'congress' | 'camarin' | 'bagong silang' {
@@ -51,6 +87,27 @@ function parseCampus(
   if (lower.includes('bagong') || lower.includes('silang'))
     return 'bagong silang';
   return 'congress';
+}
+
+function parseSection(sectionValue: string): {
+  program: string;
+  year: number;
+  section: string;
+} {
+  const section = sectionValue.trim();
+  const match = section.match(/^(.+?)(?:\s+)(\d+)(?:[-\s]?)([A-Za-z].*)$/);
+  if (match) {
+    return {
+      program: match[1].trim(),
+      year: Number(match[2]),
+      section: section,
+    };
+  }
+  return {
+    program: 'BSIT',
+    year: 2,
+    section: section || 'N/A',
+  };
 }
 
 function parseSqlTime(t: string | undefined, defaultVal: string): string {
@@ -139,6 +196,7 @@ export class ProfessorSubmissionsService {
     try {
       const type: 'AR' | 'DTR' =
         data.type === 'DTR' || data.recordType?.includes('DTR') ? 'DTR' : 'AR';
+      const periodText = String(data.period || data.record?.period || '');
       const recordPayload = data.record || data;
       const rawReference: string =
         data.reference ||
@@ -189,6 +247,14 @@ export class ProfessorSubmissionsService {
 
       // 1. Primary insert or update directly into accomplishment_reports & report_entries
       if (type === 'AR') {
+        const arRange = getHalfMonthRange(periodText);
+        if (!arRange) {
+          return ErrorHandler(
+            'AR period must use Month YYYY I or Month YYYY II',
+            400,
+          );
+        }
+
         let existingReportId: string | null =
           (data.report_id &&
           typeof data.report_id === 'string' &&
@@ -243,7 +309,7 @@ export class ProfessorSubmissionsService {
 
         if (
           !existingReportId &&
-          (data.is_revision || data.isRevision || data.status === 'Pending')
+          (data.is_revision || data.isRevision)
         ) {
           const revCheck = await this.client.query(
             `SELECT id FROM accomplishment_reports 
@@ -260,6 +326,39 @@ export class ProfessorSubmissionsService {
           if (revCheck.rows.length > 0) {
             existingReportId = revCheck.rows[0].id;
           }
+        }
+
+        const revisionReportId = [
+          data.report_id,
+          data.id,
+          recordPayload.id,
+          recordPayload.report_id,
+        ].find(
+          (value): value is string =>
+            typeof value === 'string' &&
+            value.includes('-') &&
+            value.length === 36,
+        );
+        const isRevision = data.is_revision === true || data.isRevision === true;
+        const activePeriodReport = await this.client.query(
+          `SELECT id
+             FROM accomplishment_reports
+            WHERE user_id = $1
+              AND period_start = $2::date
+              AND period_end = $3::date
+              AND LOWER(submission_status) NOT IN ('rejected', 'disapproved', 'returned')
+            ORDER BY updated_at DESC
+            LIMIT 1`,
+          [profId, arRange.periodStart, arRange.periodEnd],
+        );
+        const duplicateReportId = activePeriodReport.rows[0]?.id;
+        if (
+          duplicateReportId &&
+          !(isRevision && revisionReportId === duplicateReportId)
+        ) {
+          throw new ConflictException(
+            'An AR for this period was already submitted.',
+          );
         }
 
         let repRes;
@@ -280,6 +379,8 @@ export class ProfessorSubmissionsService {
                    submission_topics = $5,
                    submission_notes = $6,
                    submission_payload = $7::jsonb,
+                   period_start = $9::date,
+                   period_end = $10::date,
                    submitted_at = NOW(),
                    reviewed_by = NULL,
                    reviewed_at = NULL,
@@ -302,6 +403,8 @@ export class ProfessorSubmissionsService {
               notes,
               JSON.stringify(recordPayload),
               existingReportId,
+              arRange.periodStart,
+              arRange.periodEnd,
             ],
           );
           if (repRes.rows.length > 0) {
@@ -319,7 +422,7 @@ export class ProfessorSubmissionsService {
             INSERT INTO accomplishment_reports (
               user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks, created_at, updated_at
             ) VALUES (
-              $1, $2, $3, CURRENT_DATE - INTERVAL '14 days', CURRENT_DATE, 'AR-AP-STG-1', $4, NOW(), NOW()
+              $1, $2, $3, $5::date, $6::date, 'AR-AP-STG-1', $4, NOW(), NOW()
             )
             RETURNING id;
             `,
@@ -328,6 +431,8 @@ export class ProfessorSubmissionsService {
               employeeId,
               facultyNo,
               notes || 'Submitted from ARIS Desktop',
+              arRange.periodStart,
+              arRange.periodEnd,
             ],
           );
           reportId = repRes.rows[0]?.id || null;
@@ -371,6 +476,7 @@ export class ProfessorSubmissionsService {
               for (const row of tbl.rows) {
                 const code = String(row[0] || 'CC 105');
                 const section = String(row[1] || 'BSIT 2A');
+                const sectionInfo = parseSection(section);
                 const unitVal = parseInt(row[2], 10) || 3;
                 const day = String(row[3] || 'Monday');
                 const timeStr = String(row[4] || '08:00AM–11:00AM');
@@ -399,9 +505,9 @@ export class ProfessorSubmissionsService {
                     reportId,
                     courseTitle,
                     code,
-                    'BSIT',
-                    2,
-                    section,
+                    sectionInfo.program,
+                    sectionInfo.year,
+                    sectionInfo.section,
                     unitVal,
                     day,
                     shiftStart,
@@ -443,6 +549,18 @@ export class ProfessorSubmissionsService {
         '[ProfessorSubmissionsService] Error recording accomplishment report:',
         error,
       );
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      if (
+        (error as any)?.code === '23505' &&
+        (error as any)?.constraint ===
+          'idx_accomplishment_reports_active_half_period'
+      ) {
+        throw new ConflictException(
+          'An AR for this period was already submitted.',
+        );
+      }
       return ErrorHandler(
         error instanceof Error
           ? error.message
@@ -468,6 +586,33 @@ export class ProfessorSubmissionsService {
       !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)
     ) {
       return ErrorHandler('DTR period must use YYYY-MM-DD dates', 400);
+    }
+
+    const start = new Date(`${periodStart}T00:00:00Z`);
+    const end = new Date(`${periodEnd}T00:00:00Z`);
+    if (
+      isNaN(start.getTime()) ||
+      isNaN(end.getTime()) ||
+      start.getUTCMonth() !== end.getUTCMonth() ||
+      start.getUTCFullYear() !== end.getUTCFullYear() ||
+      !(
+        (start.getUTCDate() === 1 && end.getUTCDate() === 15) ||
+        (
+          start.getUTCDate() === 16 &&
+          end.getUTCDate() === new Date(
+            Date.UTC(
+              end.getUTCFullYear(),
+              end.getUTCMonth() + 1,
+              0,
+            ),
+          ).getUTCDate()
+        )
+      )
+    ) {
+      return ErrorHandler(
+        'DTR submissions must use the first or second half of the month',
+        400,
+      );
     }
 
     const professor = await this.client.query(
@@ -674,7 +819,7 @@ export class ProfessorSubmissionsService {
           query += ` WHERE (${conds.join(' OR ')}) `;
         }
 
-        query += ` ORDER BY ar.submitted_at DESC NULLS LAST, ar.created_at DESC LIMIT 50`;
+        query += ` ORDER BY ar.submitted_at DESC NULLS LAST, ar.created_at DESC`;
         const res = await this.client.query(query, params);
         dbReports = res.rows.map((row: any) => {
           const payload = row.submission_payload || {};
