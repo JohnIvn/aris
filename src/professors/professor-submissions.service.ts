@@ -207,6 +207,11 @@ export class ProfessorSubmissionsService {
         '';
       const reference: string = rawReference || `${type}-${Date.now()}`;
       const period: string = data.period || 'Current Cycle';
+      const periodStart = String(data.periodStart || '');
+      const periodEnd = String(data.periodEnd || '');
+      const hasPeriodDates =
+        /^\d{4}-\d{2}-\d{2}$/.test(periodStart) &&
+        /^\d{4}-\d{2}-\d{2}$/.test(periodEnd);
       const units: string =
         data.units || (type === 'AR' ? '3 courses' : '22 days');
       const event: string = data.event || `${type} submitted · ${period}`;
@@ -248,12 +253,19 @@ export class ProfessorSubmissionsService {
       // 1. Primary insert or update directly into accomplishment_reports & report_entries
       if (type === 'AR') {
         const arRange = getHalfMonthRange(periodText);
-        if (!arRange) {
+        if (!arRange && !hasPeriodDates) {
           return ErrorHandler(
             'AR period must use Month YYYY I or Month YYYY II',
             400,
           );
         }
+
+        const finalPeriodStart = hasPeriodDates
+          ? periodStart
+          : arRange!.periodStart;
+        const finalPeriodEnd = hasPeriodDates
+          ? periodEnd
+          : arRange!.periodEnd;
 
         let existingReportId: string | null =
           (data.report_id &&
@@ -343,13 +355,13 @@ export class ProfessorSubmissionsService {
         const activePeriodReport = await this.client.query(
           `SELECT id
              FROM accomplishment_reports
-            WHERE user_id = $1
-              AND period_start = $2::date
-              AND period_end = $3::date
+            WHERE (user_id = $1 OR employee_id = $2 OR faculty_no = $3)
+              AND period_start = $4::date
+              AND period_end = $5::date
               AND LOWER(submission_status) NOT IN ('rejected', 'disapproved', 'returned')
             ORDER BY updated_at DESC
             LIMIT 1`,
-          [profId, arRange.periodStart, arRange.periodEnd],
+          [profId, employeeId, facultyNo, finalPeriodStart, finalPeriodEnd],
         );
         const duplicateReportId = activePeriodReport.rows[0]?.id;
         if (
@@ -372,6 +384,8 @@ export class ProfessorSubmissionsService {
             `
             UPDATE accomplishment_reports
                SET approval_stage = 'AR-AP-STG-1',
+                   period_start = COALESCE($9::date, period_start),
+                   period_end = COALESCE($10::date, period_end),
                    submission_status = 'pending',
                    submission_reference = $2,
                    submission_event = $3,
@@ -379,8 +393,6 @@ export class ProfessorSubmissionsService {
                    submission_topics = $5,
                    submission_notes = $6,
                    submission_payload = $7::jsonb,
-                   period_start = $9::date,
-                   period_end = $10::date,
                    submitted_at = NOW(),
                    reviewed_by = NULL,
                    reviewed_at = NULL,
@@ -403,8 +415,8 @@ export class ProfessorSubmissionsService {
               notes,
               JSON.stringify(recordPayload),
               existingReportId,
-              arRange.periodStart,
-              arRange.periodEnd,
+              finalPeriodStart,
+              finalPeriodEnd,
             ],
           );
           if (repRes.rows.length > 0) {
@@ -431,8 +443,8 @@ export class ProfessorSubmissionsService {
               employeeId,
               facultyNo,
               notes || 'Submitted from ARIS Desktop',
-              arRange.periodStart,
-              arRange.periodEnd,
+              finalPeriodStart,
+              finalPeriodEnd,
             ],
           );
           reportId = repRes.rows[0]?.id || null;
