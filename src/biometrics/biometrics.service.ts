@@ -836,7 +836,9 @@ export class BiometricsService {
       // Optional filters
       if (empCode) {
         values.push(empCode);
-        conditions.push(`t.emp_code = $${values.length}`);
+        conditions.push(
+          `t.emp_code = $${values.length} OR t.emp = $${values.length}`,
+        );
       }
 
       if (startDate) {
