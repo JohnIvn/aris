@@ -25,7 +25,6 @@ import { createRestoreLogs } from './models/restore_logs.model';
 import { createMeetingRecords } from './models/meeting_records.model';
 import { createMeetingLogs } from './models/meeting_logs.model';
 import createReportEntries from './models/entries.model';
-import createDtrModel from './models/dtr.model';
 import createDtrSubmissionsModel from './models/dtr_submissions.model';
 import { createUserPreferences } from './models/user_preferences.model';
 import { createHardwareEvents } from './models/hardware_events.model';
@@ -127,7 +126,6 @@ export class DatabaseService implements OnModuleInit {
       await createSoftwareMonitoring(this.pool);
       await createAuthenticatorModel(this.pool);
       await createDtrBiometricsModel(this.pool);
-      await createDtrModel(this.pool);
       await createDtrSubmissionsModel(this.pool);
       await createUserPreferences(this.pool);
       await createUserNotifications(this.pool);

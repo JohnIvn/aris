@@ -17,8 +17,6 @@ export class AdminService {
       const linkTable =
         target === 'biometrics' ? 'user_id_biometrics' : 'dtr_biometrics';
 
-      // NOT EXISTS instead of NOT IN: NOT IN returns zero rows if the subquery contains a NULL,
-      // and professor_id / staff_id are NULL on every row that belongs to the other role.
       const professor_response = await this.db.query(`
         SELECT id, employee_id, username, firstname, lastname, email, position, department
         FROM user_professors p
