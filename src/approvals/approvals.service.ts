@@ -318,7 +318,9 @@ export class ApprovalsService {
             if (Array.isArray(payload?.tables) && payload.tables.length > 0) {
               tables = payload.tables;
             }
-          } catch {}
+          } catch {
+            /* empty */
+          }
         }
 
         if (tables.length === 0) {
@@ -342,17 +344,22 @@ export class ApprovalsService {
                 : `${groupEntries.length} sessions`;
 
             const rows = groupEntries.map((e) => {
-              const progYearSec = [
-                e.program,
-                e.year && e.section
-                  ? `${e.year}${e.section}`
-                  : e.section || (e.year ? String(e.year) : ''),
-              ]
-                .filter(Boolean)
-                .join(' ') || '—';
+              const progYearSec =
+                [
+                  e.program,
+                  e.year && e.section
+                    ? `${e.year}${e.section}`
+                    : e.section || (e.year ? String(e.year) : ''),
+                ]
+                  .filter(Boolean)
+                  .join(' ') || '—';
 
-              const startTime = e.shift_start ? String(e.shift_start).slice(0, 5) : '';
-              const endTime = e.shift_end ? String(e.shift_end).slice(0, 5) : '';
+              const startTime = e.shift_start
+                ? String(e.shift_start).slice(0, 5)
+                : '';
+              const endTime = e.shift_end
+                ? String(e.shift_end).slice(0, 5)
+                : '';
               const timeDisplay =
                 startTime && endTime
                   ? `${startTime}–${endTime}`
@@ -378,12 +385,16 @@ export class ApprovalsService {
         }
 
         const topics =
-          Array.from(new Set(entries.map((e) => e.topics).filter(Boolean))).join('\n') ||
+          Array.from(
+            new Set(entries.map((e) => e.topics).filter(Boolean)),
+          ).join('\n') ||
           ar.submission_topics ||
           payload?.topics ||
           '';
         const tasks =
-          Array.from(new Set(entries.map((e) => e.description).filter(Boolean))).join('\n') ||
+          Array.from(
+            new Set(entries.map((e) => e.description).filter(Boolean)),
+          ).join('\n') ||
           payload?.tasks ||
           '';
 
@@ -441,8 +452,7 @@ export class ApprovalsService {
         }
 
         const reviewer =
-          ar.reviewer_name ||
-          (stage ? `${stage} Reviewer` : 'Reviewer');
+          ar.reviewer_name || (stage ? `${stage} Reviewer` : 'Reviewer');
 
         const reviewedAt = `${formatDate(ar.updated_at || ar.created_at)} · ${formatTime(ar.updated_at || ar.created_at)}`;
         const submitted = `${formatDate(ar.created_at)} · ${formatTime(ar.created_at)}`;

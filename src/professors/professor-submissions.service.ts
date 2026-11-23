@@ -46,9 +46,7 @@ function getHalfMonthRange(periodText: string): {
   periodStart: string;
   periodEnd: string;
 } | null {
-  const match = periodText.match(
-    /^([A-Za-z]+)\s+(\d{4})\s+(I|II)$/i,
-  );
+  const match = periodText.match(/^([A-Za-z]+)\s+(\d{4})\s+(I|II)$/i);
   if (!match) return null;
 
   const months = [
@@ -264,9 +262,7 @@ export class ProfessorSubmissionsService {
         const finalPeriodStart = hasPeriodDates
           ? periodStart
           : arRange!.periodStart;
-        const finalPeriodEnd = hasPeriodDates
-          ? periodEnd
-          : arRange!.periodEnd;
+        const finalPeriodEnd = hasPeriodDates ? periodEnd : arRange!.periodEnd;
 
         let existingReportId: string | null =
           (data.report_id &&
@@ -320,10 +316,7 @@ export class ProfessorSubmissionsService {
           }
         }
 
-        if (
-          !existingReportId &&
-          (data.is_revision || data.isRevision)
-        ) {
+        if (!existingReportId && (data.is_revision || data.isRevision)) {
           const revCheck = await this.client.query(
             `SELECT id FROM accomplishment_reports 
               WHERE (user_id = $1 OR employee_id = $2 OR faculty_no = $3)
@@ -352,7 +345,8 @@ export class ProfessorSubmissionsService {
             value.includes('-') &&
             value.length === 36,
         );
-        const isRevision = data.is_revision === true || data.isRevision === true;
+        const isRevision =
+          data.is_revision === true || data.isRevision === true;
         const activePeriodReport = await this.client.query(
           `SELECT id
              FROM accomplishment_reports
@@ -479,12 +473,8 @@ export class ProfessorSubmissionsService {
         if (reportId && Array.isArray(recordPayload.tables)) {
           for (const tbl of recordPayload.tables) {
             const courseTitle = tbl.title || 'Course';
-            const courseTopics =
-              tbl.topics || recordPayload.topics || '';
-            const courseTasks =
-              tbl.tasks ||
-              recordPayload.tasks ||
-              '';
+            const courseTopics = tbl.topics || recordPayload.topics || '';
+            const courseTasks = tbl.tasks || recordPayload.tasks || '';
             if (Array.isArray(tbl.rows)) {
               for (const row of tbl.rows) {
                 const code = String(row[0] || '').trim();
@@ -508,7 +498,7 @@ export class ProfessorSubmissionsService {
                 if (shiftStart && shiftEnd) {
                   const [sh, sm] = shiftStart.split(':').map(Number);
                   const [eh, em] = shiftEnd.split(':').map(Number);
-                  const diff = (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0));
+                  const diff = eh * 60 + (em || 0) - (sh * 60 + (sm || 0));
                   if (diff > 0) calculatedHours = diff / 60;
                 } else if (unitVal > 0) {
                   calculatedHours = Number(unitVal);
@@ -577,9 +567,8 @@ export class ProfessorSubmissionsService {
         throw error;
       }
       if (
-        (error as any)?.code === '23505' &&
-        (error as any)?.constraint ===
-          'idx_accomplishment_reports_active_half_period'
+        error?.code === '23505' &&
+        error?.constraint === 'idx_accomplishment_reports_active_half_period'
       ) {
         throw new ConflictException(
           'An AR for this period was already submitted.',
@@ -621,16 +610,11 @@ export class ProfessorSubmissionsService {
       start.getUTCFullYear() !== end.getUTCFullYear() ||
       !(
         (start.getUTCDate() === 1 && end.getUTCDate() === 15) ||
-        (
-          start.getUTCDate() === 16 &&
-          end.getUTCDate() === new Date(
-            Date.UTC(
-              end.getUTCFullYear(),
-              end.getUTCMonth() + 1,
-              0,
-            ),
-          ).getUTCDate()
-        )
+        (start.getUTCDate() === 16 &&
+          end.getUTCDate() ===
+            new Date(
+              Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0),
+            ).getUTCDate())
       )
     ) {
       return ErrorHandler(
@@ -847,17 +831,13 @@ export class ProfessorSubmissionsService {
         const res = await this.client.query(query, params);
         dbReports = res.rows.map((row: any) => {
           const payload = row.submission_payload || {};
-          const period =
-            payload.period ||
-            row.remarks ||
-            'Current Cycle';
+          const period = payload.period || row.remarks || 'Current Cycle';
           return {
             id: row.id,
             type: 'AR',
             period,
             units:
-              row.submission_units ||
-              `${payload.tables?.length || 1} courses`,
+              row.submission_units || `${payload.tables?.length || 1} courses`,
             submitted:
               row.submitted_at ||
               row.created_at ||
@@ -870,8 +850,7 @@ export class ProfessorSubmissionsService {
               : 'Pending',
             stage: row.current_stage || 'Checker',
             currentStage: row.current_stage || 'Checker',
-            event:
-              row.submission_event || `AR submitted · ${period}`,
+            event: row.submission_event || `AR submitted · ${period}`,
             record: {
               ...payload,
               id: row.id,

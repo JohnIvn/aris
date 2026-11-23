@@ -255,7 +255,9 @@ export class AuditService {
             if (Array.isArray(payload?.tables) && payload.tables.length > 0) {
               tables = payload.tables;
             }
-          } catch {}
+          } catch {
+            /* empty */
+          }
         }
 
         if (tables.length === 0) {
@@ -279,17 +281,22 @@ export class AuditService {
                 : `${groupEntries.length} sessions`;
 
             const rows = groupEntries.map((e) => {
-              const progYearSec = [
-                e.program,
-                e.year && e.section
-                  ? `${e.year}${e.section}`
-                  : e.section || (e.year ? String(e.year) : ''),
-              ]
-                .filter(Boolean)
-                .join(' ') || '—';
+              const progYearSec =
+                [
+                  e.program,
+                  e.year && e.section
+                    ? `${e.year}${e.section}`
+                    : e.section || (e.year ? String(e.year) : ''),
+                ]
+                  .filter(Boolean)
+                  .join(' ') || '—';
 
-              const startTime = e.shift_start ? String(e.shift_start).slice(0, 5) : '';
-              const endTime = e.shift_end ? String(e.shift_end).slice(0, 5) : '';
+              const startTime = e.shift_start
+                ? String(e.shift_start).slice(0, 5)
+                : '';
+              const endTime = e.shift_end
+                ? String(e.shift_end).slice(0, 5)
+                : '';
               const timeDisplay =
                 startTime && endTime
                   ? `${startTime}–${endTime}`
@@ -315,12 +322,16 @@ export class AuditService {
         }
 
         const topics =
-          Array.from(new Set(entries.map((e) => e.topics).filter(Boolean))).join('\n') ||
+          Array.from(
+            new Set(entries.map((e) => e.topics).filter(Boolean)),
+          ).join('\n') ||
           ar.submission_topics ||
           payload?.topics ||
           '';
         const tasks =
-          Array.from(new Set(entries.map((e) => e.description).filter(Boolean))).join('\n') ||
+          Array.from(
+            new Set(entries.map((e) => e.description).filter(Boolean)),
+          ).join('\n') ||
           payload?.tasks ||
           '';
 
@@ -335,8 +346,10 @@ export class AuditService {
           ar.submission_status === 'declined' ||
           ar.submission_status === 'disapproved' ||
           ar.submission_status === 'rejected' ||
-          (ar.remarks && /decline|reject|disapprov|return|flag/i.test(ar.remarks)) ||
-          (ar.submission_notes && /decline|reject|disapprov|return|flag/i.test(ar.submission_notes));
+          (ar.remarks &&
+            /decline|reject|disapprov|return|flag/i.test(ar.remarks)) ||
+          (ar.submission_notes &&
+            /decline|reject|disapprov|return|flag/i.test(ar.submission_notes));
 
         if (isDisapproved) {
           result = 'Rejected';
