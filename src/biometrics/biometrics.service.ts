@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { Pool } from 'pg';
-import { DtrRow } from '../lib/data/biometrics.interface';
 import { DatabaseService } from '../database/database.service';
 import { LoggerService } from '../logger/logger.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
@@ -45,14 +44,6 @@ export class BiometricsError extends Error {
     super(message);
   }
 }
-
-interface Owner {
-  biometricsRowId: string;
-  professorId: string | null;
-  staffId: string | null;
-  adminId: string | null;
-}
-
 export interface PunchResult {
   action: PunchAction;
   recordId: string;
@@ -71,10 +62,6 @@ export interface DtrUser {
   role: string;
 }
 
-const TZ = 'Asia/Manila';
-const TODAY = `(NOW() AT TIME ZONE '${TZ}')::date`;
-const NOW_TIME = `(NOW() AT TIME ZONE '${TZ}')::time(0)`;
-const DEBOUNCE_SECONDS = 60; // ignore a second scan right after a punch
 const TAG_RE = /^(auth-\d{5,}|[A-Za-z0-9_-]{3,32})$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -294,189 +281,6 @@ export class BiometricsService {
       return this.toError(error);
     } finally {
       client.release();
-    }
-  }
-
-  // ───────────────────────── Attendance ─────────────────────────
-
-  /**
-   * Multiple dtr rows per day are allowed (one row per time_in/time_out pair, hours computed per row).
-   * Based on the user's latest row:
-   *   scan within DEBOUNCE_SECONDS of the last write -> duplicate
-   *   open row (time_in, no time_out) from today -> time out
-   *   otherwise -> time in (new row)
-   * No night shifts: an open row from a previous day is a missed time out. It stays time_out NULL
-   * (flagged by getDtrRecords) and never blocks or gets closed by a later scan.
-   */
-  async punch(userId: string, authenticatorTag: string): Promise<PunchResult> {
-    if (typeof userId !== 'string' || !UUID_RE.test(userId)) {
-      throw new BiometricsError('invalid_request', "'user_id' must be a UUID");
-    }
-    if (!authenticatorTag) {
-      throw new BiometricsError(
-        'invalid_request',
-        "'authenticator_tag' is required",
-      );
-    }
-
-    const ownerRes = await this.db.query<{
-      id: string;
-      professor_id: string | null;
-      staff_id: string | null;
-      admin_id: string | null;
-    }>(
-      `SELECT id, professor_id, staff_id, admin_id FROM dtr_biometrics
-       WHERE authenticator_tag = $2
-         AND authenticator_fingerprint IS NOT NULL
-         AND (professor_id = $1 OR staff_id = $1)
-       LIMIT 1`,
-      [userId, authenticatorTag],
-    );
-    if (!ownerRes.rows[0]) {
-      throw new BiometricsError(
-        'unknown_credential',
-        'User has no fingerprint enrolled on this authenticator',
-      );
-    }
-    const owner: Owner = {
-      biometricsRowId: ownerRes.rows[0].id,
-      professorId: ownerRes.rows[0].professor_id,
-      staffId: ownerRes.rows[0].staff_id,
-      adminId: ownerRes.rows[0].admin_id,
-    };
-
-    const { rows } = await this.db.query<
-      DtrRow & {
-        admin_id: string | null;
-        too_soon: boolean;
-        is_today: boolean;
-      }
-    >(
-      `SELECT id, admin_id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text,
-              (updated_at > NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds') AS too_soon,
-              (shift_date = ${TODAY}) AS is_today
-       FROM dtr
-       WHERE professor_id IS NOT DISTINCT FROM $1::uuid
-         AND staff_id IS NOT DISTINCT FROM $2::uuid
-       ORDER BY created_at DESC LIMIT 1`,
-      [owner.professorId, owner.staffId],
-    );
-    const row = rows[0];
-
-    if (row?.too_soon) return this.toResult('duplicate', row, owner);
-    if (row?.time_in && !row.time_out && row.is_today) {
-      return this.timeOut(row.id, owner);
-    }
-    return this.timeIn(owner, authenticatorTag);
-  }
-
-  private async timeIn(
-    owner: Owner,
-    authenticatorTag: string,
-  ): Promise<PunchResult> {
-    const ins = await this.db.query<DtrRow>(
-      `INSERT INTO dtr (professor_id, staff_id, authenticator_tag, time_in, shift_date, on_site)
-       VALUES ($1, $2, $3, ${NOW_TIME}, ${TODAY}, FALSE)
-       RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
-      [owner.professorId, owner.staffId, authenticatorTag],
-    );
-    return this.toResult('time_in', ins.rows[0], owner);
-  }
-
-  private async timeOut(recordId: string, owner: Owner): Promise<PunchResult> {
-    const upd = await this.db.query<DtrRow>(
-      `UPDATE dtr
-       SET time_out = ${NOW_TIME},
-           total_hours = ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600.0, 2),
-           updated_at = NOW()
-       WHERE id = $1
-       RETURNING id, time_in::text, time_out::text, total_hours::text, on_site, shift_date::text`,
-      [recordId],
-    );
-    return this.toResult('time_out', upd.rows[0], owner);
-  }
-
-  private toResult(action: PunchAction, r: DtrRow, owner: Owner): PunchResult {
-    return {
-      action,
-      recordId: r.id,
-      shiftDate: r.shift_date,
-      timeIn: r.time_in,
-      timeOut: r.time_out,
-      totalHours: r.total_hours,
-      onSite: r.on_site,
-      professorId: owner.professorId,
-      staffId: owner.staffId,
-      adminId: owner.adminId,
-    };
-  }
-
-  /** Admin: every record. Professor/staff: only their own. */
-  async getDtrRecords(
-    user: DtrUser,
-    page: number,
-    limit: number,
-    missedOnly = false,
-  ) {
-    try {
-      const isAdmin = user.role === 'administrator';
-      const conds: string[] = [];
-      const params: unknown[] = [];
-
-      if (!isAdmin) {
-        params.push(user.id);
-        conds.push(`(d.professor_id = $1 OR d.staff_id = $1)`);
-      }
-      if (missedOnly) {
-        conds.push(
-          `(d.time_in IS NULL OR (d.time_out IS NULL AND d.shift_date < ${TODAY}))`,
-        );
-      }
-      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-
-      const {
-        rows: [{ total }],
-      } = await this.db.query(
-        `SELECT COUNT(*)::int AS total FROM dtr d ${where}`,
-        params,
-      );
-
-      const limitIdx = params.length + 1;
-      const offsetIdx = params.length + 2;
-      const { rows } = await this.db.query(
-        `SELECT d.id, d.professor_id, d.staff_id, d.admin_id, d.authenticator_tag,
-              d.time_in::text, d.time_out::text, d.total_hours::text,
-              d.shift_date::text, d.on_site, d.created_at, d.updated_at,
-              COALESCE(p.employee_id, s.employee_id) AS employee_id,
-              TRIM(CONCAT(COALESCE(p.firstname, s.firstname), ' ', COALESCE(p.lastname, s.lastname))) AS name,
-              (d.time_in IS NULL) AS missed_time_in,
-              (d.time_out IS NULL AND d.shift_date < ${TODAY}) AS missed_time_out,
-              (SELECT COALESCE(SUM(x.total_hours), 0)::text
-                 FROM dtr x
-                WHERE x.shift_date = d.shift_date
-                  AND x.professor_id IS NOT DISTINCT FROM d.professor_id
-                  AND x.staff_id IS NOT DISTINCT FROM d.staff_id
-                  AND x.time_in IS NOT NULL AND x.time_out IS NOT NULL) AS daily_hours
-       FROM dtr d
-       LEFT JOIN user_professors p ON d.professor_id = p.id
-       LEFT JOIN user_staffs s ON d.staff_id = s.id
-       ${where}
-       ORDER BY d.shift_date DESC, d.created_at DESC
-       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-        [...params, limit, (page - 1) * limit],
-      );
-
-      return {
-        ...SuccessHandler('Successfully fetched DTR records', 200, rows),
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.max(1, Math.ceil(total / limit)),
-        },
-      };
-    } catch (error) {
-      return this.toError(error);
     }
   }
 
