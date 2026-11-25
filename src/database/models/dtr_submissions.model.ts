@@ -26,5 +26,9 @@ export default async function createDtrSubmissionsModel(client: Pool) {
     UPDATE dtr_submissions
        SET approval_stage = REPLACE(approval_stage, 'AR-AP-STG-', 'DTR-AP-STG-')
      WHERE approval_stage LIKE 'AR-AP-STG-%';
+
+    ALTER TABLE dtr_submissions
+      ADD COLUMN IF NOT EXISTS workflow_snapshot JSONB,
+      ADD COLUMN IF NOT EXISTS current_stage TEXT;
   `);
 }

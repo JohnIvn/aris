@@ -18,6 +18,7 @@ import { UserSession } from '../lib/data/interfaces';
 import { LoggerService } from '../logger/logger.service';
 import { getUserById } from '../lib/utils/helpers';
 import { Dtr, DtrStatus } from '../lib/data/dtr.interface';
+import { resolveItemStages } from '../approvals/approvals.service';
 
 const SHIFT_STARTS_MIN = [8 * 60, 13 * 60];
 const LATE_GRACE_MIN = 0;
@@ -496,9 +497,11 @@ export class ReportsService {
         approval_stage: string;
         status: string;
         updated_at: string;
+        workflow_snapshot: any;
+        current_stage: string;
       }>(
         `
-        SELECT ds.period_start, ds.period_end, ds.approval_stage, ds.status, ds.updated_at
+        SELECT ds.period_start, ds.period_end, ds.approval_stage, ds.status, ds.updated_at, ds.workflow_snapshot, ds.current_stage
         FROM dtr_submissions ds
         LEFT JOIN user_professors dp ON dp.id = ds.professor_id
         WHERE ds.professor_id = $1
@@ -573,16 +576,48 @@ export class ReportsService {
               ) * 100,
             ) / 100;
 
+          const arResolved = resolveItemStages((report as any).workflow_snapshot, 'AR');
+          let arCurrentIdx = arResolved.stages.findIndex((s) => s.stage_key === report.approval_stage);
+          if (arCurrentIdx === -1 && (report as any).current_stage) {
+            arCurrentIdx = arResolved.stages.findIndex(
+              (s) => s.label.toLowerCase() === (report as any).current_stage.toLowerCase(),
+            );
+          }
+          if (arCurrentIdx === -1) arCurrentIdx = 0;
+          const arCurrentStage = arResolved.stages[arCurrentIdx];
+
+          const dtrResolved = resolveItemStages(dtrSubmission?.workflow_snapshot, 'DTR');
+          let dtrCurrentIdx = dtrResolved.stages.findIndex(
+            (s) => s.stage_key === dtrSubmission?.approval_stage,
+          );
+          if (dtrCurrentIdx === -1 && dtrSubmission?.current_stage) {
+            dtrCurrentIdx = dtrResolved.stages.findIndex(
+              (s) => s.label.toLowerCase() === dtrSubmission.current_stage.toLowerCase(),
+            );
+          }
+          if (dtrCurrentIdx === -1) dtrCurrentIdx = 0;
+          const dtrCurrentStage = dtrResolved.stages[dtrCurrentIdx];
+
           return {
             id: report.id,
             periodStart: report.period_start,
             periodEnd: report.period_end,
             periodLabel,
             stage: report.approval_stage,
+            current_stage: (report as any).current_stage || arCurrentStage?.label || report.approval_stage,
+            currentStageIndex: arCurrentIdx,
+            stages: arResolved.stages,
+            isPastFlow: arResolved.isPastFlow,
+            workflow_snapshot: (report as any).workflow_snapshot ?? null,
             submission_status: report.submission_status ?? null,
             status: report.submission_status ?? null,
             submission_notes: report.submission_notes ?? report.remarks ?? null,
             dtr_approval_stage: dtrSubmission?.approval_stage ?? null,
+            dtr_current_stage: dtrSubmission?.current_stage || dtrCurrentStage?.label || dtrSubmission?.approval_stage,
+            dtr_currentStageIndex: dtrCurrentIdx,
+            dtr_stages: dtrResolved.stages,
+            dtr_isPastFlow: dtrResolved.isPastFlow,
+            dtr_workflow_snapshot: dtrSubmission?.workflow_snapshot ?? null,
             dtr_status: dtrSubmission?.status ?? null,
             updatedAt: report.updated_at,
             professorName,

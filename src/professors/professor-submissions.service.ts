@@ -375,10 +375,38 @@ export class ProfessorSubmissionsService {
               ? notes
               : 'Resubmitted with corrections. Pending review.';
 
+          let initialStageKey = 'AR-AP-STG-1';
+          let initialStageLabel = 'Checker';
+          const snapCheck = await this.client.query(
+            `SELECT workflow_snapshot FROM accomplishment_reports WHERE id = $1 LIMIT 1`,
+            [existingReportId],
+          );
+          if (snapCheck.rows.length > 0 && snapCheck.rows[0].workflow_snapshot) {
+            const rawSnap = snapCheck.rows[0].workflow_snapshot;
+            const parsedSnap = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
+            const snapList = Array.isArray(parsedSnap) ? parsedSnap : parsedSnap?.stages;
+            if (Array.isArray(snapList) && snapList.length > 0) {
+              initialStageKey = snapList[0].stage_key || snapList[0].key || initialStageKey;
+              initialStageLabel = snapList[0].label || snapList[0].role_name || initialStageLabel;
+            }
+          } else {
+            const activeArCheck = await this.client.query(`
+              SELECT stage_key, label, role_name
+                FROM approval_stages
+               WHERE document_type IN ('AR', 'ALL') AND is_active = true
+               ORDER BY stage_order ASC
+               LIMIT 1
+            `);
+            if (activeArCheck.rows.length > 0) {
+              initialStageKey = activeArCheck.rows[0].stage_key;
+              initialStageLabel = activeArCheck.rows[0].label;
+            }
+          }
+
           repRes = await this.client.query(
             `
             UPDATE accomplishment_reports
-               SET approval_stage = 'AR-AP-STG-1',
+               SET approval_stage = $11,
                    period_start = COALESCE($9::date, period_start),
                    period_end = COALESCE($10::date, period_end),
                    submission_status = 'pending',
@@ -391,7 +419,7 @@ export class ProfessorSubmissionsService {
                    submitted_at = NOW(),
                    reviewed_by = NULL,
                    reviewed_at = NULL,
-                   current_stage = 'Checker',
+                   current_stage = $12,
                    current_since = NOW(),
                    remarks = $1,
                    payroll_availability = FALSE,
@@ -412,6 +440,8 @@ export class ProfessorSubmissionsService {
               existingReportId,
               finalPeriodStart,
               finalPeriodEnd,
+              initialStageKey,
+              initialStageLabel,
             ],
           );
           if (repRes.rows.length > 0) {
@@ -424,12 +454,57 @@ export class ProfessorSubmissionsService {
         }
 
         if (!reportId) {
+          const arStagesRes = await this.client.query(
+            `SELECT id, stage_key, label, role_name, stage_order, document_type, color, description, is_final
+               FROM approval_stages
+              WHERE is_active = TRUE AND (document_type = 'AR' OR document_type = 'ALL')
+              ORDER BY stage_order ASC`,
+          );
+          const activeArStages =
+            arStagesRes.rows.length > 0
+              ? arStagesRes.rows
+              : [
+                  {
+                    stage_key: 'AR-AP-STG-1',
+                    label: 'Checker',
+                    role_name: 'Checker',
+                    stage_order: 1,
+                    color: '#3a7d4e',
+                    is_final: false,
+                  },
+                  {
+                    stage_key: 'AR-AP-STG-2',
+                    label: 'Secretary',
+                    role_name: 'Secretary',
+                    stage_order: 2,
+                    color: '#3f8ecc',
+                    is_final: false,
+                  },
+                  {
+                    stage_key: 'AR-AP-STG-3',
+                    label: 'HR',
+                    role_name: 'HR',
+                    stage_order: 3,
+                    color: '#8a63c4',
+                    is_final: false,
+                  },
+                  {
+                    stage_key: 'AR-AP-STG-4',
+                    label: 'Accounting',
+                    role_name: 'Accounting',
+                    stage_order: 4,
+                    color: '#d99a2b',
+                    is_final: true,
+                  },
+                ];
+          const initialStage = activeArStages[0];
+
           repRes = await this.client.query(
             `
             INSERT INTO accomplishment_reports (
-              user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks, created_at, updated_at
+              user_id, employee_id, faculty_no, period_start, period_end, approval_stage, remarks, workflow_snapshot, created_at, updated_at
             ) VALUES (
-              $1, $2, $3, $5::date, $6::date, 'AR-AP-STG-1', $4, NOW(), NOW()
+              $1, $2, $3, $5::date, $6::date, $7, $4, $8::jsonb, NOW(), NOW()
             )
             RETURNING id;
             `,
@@ -440,6 +515,8 @@ export class ProfessorSubmissionsService {
               notes || 'Submitted from ARIS Desktop',
               finalPeriodStart,
               finalPeriodEnd,
+              initialStage.stage_key,
+              JSON.stringify(activeArStages),
             ],
           );
           reportId = repRes.rows[0]?.id || null;
@@ -454,9 +531,9 @@ export class ProfessorSubmissionsService {
                       submission_notes = $5,
                       submission_payload = $6::jsonb,
                       submitted_at = NOW(),
-                      current_stage = 'Checker',
+                      current_stage = $7,
                       current_since = NOW()
-                WHERE id = $7`,
+                WHERE id = $8`,
               [
                 reference,
                 event,
@@ -464,6 +541,7 @@ export class ProfessorSubmissionsService {
                 topics,
                 notes,
                 JSON.stringify(recordPayload),
+                initialStage.label,
                 reportId,
               ],
             );
@@ -649,23 +727,78 @@ export class ProfessorSubmissionsService {
         '',
       );
     const attachmentName = `DTR_${name || 'Faculty'}_Logged.xlsx`;
+    const dtrStagesRes = await this.client.query(
+      `SELECT id, stage_key, label, role_name, stage_order, document_type, color, description, is_final
+         FROM approval_stages
+        WHERE is_active = TRUE AND (document_type = 'DTR' OR document_type = 'ALL')
+        ORDER BY stage_order ASC`,
+    );
+    const activeDtrStages =
+      dtrStagesRes.rows.length > 0
+        ? dtrStagesRes.rows
+        : [
+            {
+              stage_key: 'DTR-AP-STG-1',
+              label: 'Checker',
+              role_name: 'Checker',
+              stage_order: 1,
+              color: '#3a7d4e',
+              is_final: false,
+            },
+            {
+              stage_key: 'DTR-AP-STG-2',
+              label: 'Secretary',
+              role_name: 'Secretary',
+              stage_order: 2,
+              color: '#3f8ecc',
+              is_final: false,
+            },
+            {
+              stage_key: 'DTR-AP-STG-3',
+              label: 'HR',
+              role_name: 'HR',
+              stage_order: 3,
+              color: '#8a63c4',
+              is_final: false,
+            },
+            {
+              stage_key: 'DTR-AP-STG-4',
+              label: 'Accounting',
+              role_name: 'Accounting',
+              stage_order: 4,
+              color: '#d99a2b',
+              is_final: true,
+            },
+          ];
+    const initialDtrStage = activeDtrStages[0];
+
     const result = await this.client.query(
       `INSERT INTO dtr_submissions (
-         professor_id, period_start, period_end, approval_stage, status,
-         remarks, attachment_name, submitted_at, updated_at
-       ) VALUES ($1, $2::date, $3::date, 'DTR-AP-STG-1', 'pending',
-         'Submitted for Faculty Checker review.', $4, NOW(), NOW())
+         professor_id, period_start, period_end, approval_stage, current_stage, status,
+         remarks, attachment_name, workflow_snapshot, submitted_at, updated_at
+       ) VALUES ($1, $2::date, $3::date, $4, $5, 'pending',
+         'Submitted for initial verification.', $6, $7::jsonb, NOW(), NOW())
        ON CONFLICT (professor_id, period_start, period_end)
        DO UPDATE SET
-         approval_stage = 'DTR-AP-STG-1',
+         approval_stage = EXCLUDED.approval_stage,
+         current_stage = EXCLUDED.current_stage,
          status = 'pending',
-         remarks = 'Submitted for Faculty Checker review.',
+         remarks = 'Submitted for initial verification.',
          attachment_name = EXCLUDED.attachment_name,
+         workflow_snapshot = EXCLUDED.workflow_snapshot,
          submitted_at = NOW(),
          updated_at = NOW()
        RETURNING id, period_start, period_end, approval_stage, status,
                  remarks, attachment_name, submitted_at`,
-      [user.id, periodStart, periodEnd, attachmentName],
+      [
+        user.id,
+        periodStart,
+        periodEnd,
+        initialDtrStage.stage_key,
+        initialDtrStage.label,
+        attachmentName,
+        JSON.stringify(activeDtrStages),
+      ],
     );
     const submission = result.rows[0];
 

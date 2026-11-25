@@ -45,7 +45,8 @@ export default async function createReports(client: Pool) {
       ADD COLUMN IF NOT EXISTS reviewed_by UUID,
       ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS current_stage TEXT DEFAULT 'Checker',
-      ADD COLUMN IF NOT EXISTS current_since TIMESTAMP DEFAULT NOW();
+      ADD COLUMN IF NOT EXISTS current_since TIMESTAMP DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS workflow_snapshot JSONB;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_accomplishment_reports_submission_reference
       ON accomplishment_reports (submission_reference)
       WHERE submission_reference IS NOT NULL;

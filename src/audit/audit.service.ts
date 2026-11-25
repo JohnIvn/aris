@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { ErrorHandler, SuccessHandler } from '../lib/utils/handlers';
 import { ListAuditDto } from './dto/audit.dto';
+import { resolveItemStages } from '../approvals/approvals.service';
 
 export interface AuditRecordTable {
   title: string;
@@ -44,6 +45,9 @@ export interface AuditLogItem {
   stage_order?: number;
   payroll_availability?: boolean;
   payroll_received?: boolean;
+  stages?: any[];
+  isPastFlow?: boolean;
+  currentStageIndex?: number;
   record: AuditRecordPayload;
 }
 
@@ -144,6 +148,7 @@ export class AuditService {
           ar.reviewed_at,
           ar.current_stage,
           ar.current_since,
+          ar.workflow_snapshot,
           ar.payroll_availability,
           ar.payroll_received,
           ar.payroll_received_date,
@@ -213,6 +218,7 @@ export class AuditService {
           COALESCE(ast.stage_order, 1) AS stage_order,
           ds.status AS submission_status,
           ds.remarks,
+          ds.workflow_snapshot,
           ds.attachment_name,
           ds.submitted_at,
           ds.created_at AS submission_created_at,
@@ -338,9 +344,31 @@ export class AuditService {
         const periodStr = `${formatDate(ar.period_start)} – ${formatDate(ar.period_end)}`;
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
 
+        const { stages: arStages, isPastFlow: arIsPastFlow } = resolveItemStages(ar.workflow_snapshot, 'AR');
+        let currentStageIndex = arStages.findIndex(
+          (s) => s.stage_key === ar.approval_stage,
+        );
+        if (currentStageIndex === -1 && ar.current_stage) {
+          currentStageIndex = arStages.findIndex(
+            (s) => s.label.toLowerCase() === ar.current_stage.toLowerCase(),
+          );
+        }
+        if (currentStageIndex === -1 && ar.approval_stage) {
+          currentStageIndex = arStages.findIndex(
+            (s) => s.label.toLowerCase() === ar.approval_stage.toLowerCase() ||
+                   s.role_name?.toLowerCase() === ar.approval_stage.toLowerCase(),
+          );
+        }
+        if (currentStageIndex === -1) currentStageIndex = 0;
+
+        const currentStageObj = arStages[currentStageIndex] || arStages[0];
+        const stageLabel = currentStageObj?.label || ar.stage_label || 'Checker';
+        const stageRole = currentStageObj?.role_name || currentStageObj?.label || 'Checker';
+        const isFinalStage = Boolean(currentStageObj?.is_final || currentStageIndex === arStages.length - 1);
+
         // Determine result and action
         let result: 'Approved' | 'Rejected' | 'Pending' = 'Pending';
-        let action = 'AR submitted';
+        let action = `AR in ${stageLabel} review`;
 
         const isDisapproved =
           ar.submission_status === 'declined' ||
@@ -354,41 +382,20 @@ export class AuditService {
         if (isDisapproved) {
           result = 'Rejected';
           action = 'AR rejected · Returned for correction';
-        } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {
-          result =
-            ar.payroll_availability || ar.payroll_received
-              ? 'Approved'
-              : 'Pending';
+        } else if (isFinalStage && (ar.payroll_availability || ar.payroll_received || ar.submission_status === 'approved')) {
+          result = 'Approved';
           action = ar.payroll_received
             ? 'AR approved · Payroll received'
             : ar.payroll_availability
               ? 'AR approved · Payroll released'
-              : 'AR in Accounting validation';
-        } else if (
-          ar.approval_stage === 'AR-AP-STG-3' ||
-          ar.stage_order === 3
-        ) {
+              : `AR approved at final stage (${stageLabel})`;
+        } else if (isFinalStage) {
           result = 'Pending';
-          action = 'AR endorsed by Secretary · In HR review';
-        } else if (
-          ar.approval_stage === 'AR-AP-STG-2' ||
-          ar.stage_order === 2
-        ) {
-          result = 'Pending';
-          action = 'AR verified by Checker · In Department review';
+          action = `AR in ${stageLabel} validation`;
         } else {
           result = 'Pending';
-          action = 'AR submitted · Pending review';
+          action = `AR in ${stageLabel} review`;
         }
-
-        const stageRole =
-          ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4
-            ? 'Accounting'
-            : ar.approval_stage === 'AR-AP-STG-3' || ar.stage_order === 3
-              ? 'HR'
-              : ar.approval_stage === 'AR-AP-STG-2' || ar.stage_order === 2
-                ? 'Secretary'
-                : 'Checker';
 
         const target = `${periodStr} · ${entryCount} outputs`;
         const reviewer =
@@ -399,7 +406,7 @@ export class AuditService {
         const remarkText =
           ar.submission_notes ||
           ar.remarks ||
-          `Current Stage: ${stageRole} (${ar.approval_stage}) · ${
+          `Current Stage: ${stageLabel} (${ar.approval_stage}) · ${
             result === 'Approved'
               ? 'Payroll availability verified'
               : 'Awaiting subsequent endorsement'
@@ -414,13 +421,16 @@ export class AuditService {
           target,
           time: formatTime(ar.updated_at || ar.created_at),
           result,
-          stage: ar.stage_label || stageRole,
+          stage: stageLabel,
           stage_role: stageRole,
-          stage_key: ar.approval_stage,
+          stage_key: currentStageObj?.stage_key || ar.approval_stage,
           approval_stage: ar.approval_stage,
-          stage_order: ar.stage_order,
+          stage_order: currentStageObj?.stage_order || ar.stage_order,
           payroll_availability: ar.payroll_availability,
           payroll_received: ar.payroll_received,
+          stages: arStages,
+          isPastFlow: arIsPastFlow,
+          currentStageIndex,
           record: {
             period: periodStr,
             reference: refStr,
@@ -480,24 +490,33 @@ export class AuditService {
           },
         ];
 
-        // approval_stages stores AR (1-4) and DTR (5-8) in one global order,
-        // so normalize the DTR stage to its own 1-4 position before comparing.
-        const stageKey = String(first.approval_stage || '').toUpperCase();
-        const dtrStageIndex = [
-          'DTR-AP-STG-1',
-          'DTR-AP-STG-2',
-          'DTR-AP-STG-3',
-          'DTR-AP-STG-4',
-        ].indexOf(stageKey);
-        const stageOrder =
-          dtrStageIndex !== -1
-            ? dtrStageIndex + 1
-            : Math.max(1, (Number(first.stage_order) || 1) - 4);
+        const { stages: dtrStages, isPastFlow: dtrIsPastFlow } = resolveItemStages(first.workflow_snapshot, 'DTR');
+        let currentStageIndex = dtrStages.findIndex(
+          (s) => s.stage_key === first.approval_stage,
+        );
+        if (currentStageIndex === -1 && first.dtr_current_stage) {
+          currentStageIndex = dtrStages.findIndex(
+            (s) => s.label.toLowerCase() === first.dtr_current_stage.toLowerCase(),
+          );
+        }
+        if (currentStageIndex === -1 && first.approval_stage) {
+          currentStageIndex = dtrStages.findIndex(
+            (s) => s.label.toLowerCase() === first.approval_stage.toLowerCase() ||
+                   s.role_name?.toLowerCase() === first.approval_stage.toLowerCase(),
+          );
+        }
+        if (currentStageIndex === -1) currentStageIndex = 0;
+
+        const currentStageObj = dtrStages[currentStageIndex] || dtrStages[0];
+        const stageLabel = currentStageObj?.label || first.stage_label || 'Checker';
+        const stageRole = currentStageObj?.role_name || currentStageObj?.label || 'Checker';
+        const isFinalStage = Boolean(currentStageObj?.is_final || currentStageIndex === dtrStages.length - 1);
+
         const submissionStatus = String(
           first.submission_status || '',
         ).toLowerCase();
         let result: 'Approved' | 'Rejected' | 'Pending' = 'Pending';
-        let action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
+        let action = `DTR in ${stageLabel} review`;
 
         if (
           submissionStatus === 'declined' ||
@@ -506,15 +525,15 @@ export class AuditService {
         ) {
           result = 'Rejected';
           action = 'DTR rejected · Returned for correction';
-        } else if (submissionStatus === 'approved') {
+        } else if (submissionStatus === 'approved' || (isFinalStage && submissionStatus !== 'pending')) {
           result = 'Approved';
-          action = 'DTR approved · Accounting validation complete';
-        } else if (stageOrder >= 4) {
+          action = `DTR approved · ${stageLabel} validation complete`;
+        } else if (isFinalStage) {
           result = 'Pending';
-          action = 'DTR in Accounting validation';
+          action = `DTR in ${stageLabel} validation`;
         } else {
           result = 'Pending';
-          action = `DTR submitted · ${first.stage_label || 'Pending review'}`;
+          action = `DTR in ${stageLabel} review`;
         }
 
         const target = `${periodStr} · ${daysLogged} days logged`;
@@ -529,11 +548,14 @@ export class AuditService {
           target,
           time: formatTime(first.updated_at || first.created_at),
           result,
-          stage: first.stage_label || first.approval_stage,
-          stage_role: first.stage_label || first.approval_stage,
-          stage_key: first.approval_stage,
+          stage: stageLabel,
+          stage_role: stageRole,
+          stage_key: currentStageObj?.stage_key || first.approval_stage,
           approval_stage: first.approval_stage,
-          stage_order: stageOrder,
+          stage_order: currentStageObj?.stage_order || currentStageIndex + 1,
+          stages: dtrStages,
+          isPastFlow: dtrIsPastFlow,
+          currentStageIndex,
           record: {
             period: periodStr,
             reference: refStr,
@@ -626,11 +648,16 @@ export class AuditService {
           ast.id,
           ast.stage_key,
           ast.label,
+          ast.role_name,
           ast.stage_order,
+          ast.document_type,
+          ast.color,
+          ast.description,
+          ast.is_final,
           ast.is_active,
           (SELECT COUNT(*)::int FROM accomplishment_reports ar WHERE ar.approval_stage = ast.stage_key) AS report_count
         FROM approval_stages ast
-        ORDER BY ast.stage_order ASC
+        ORDER BY ast.document_type ASC, ast.stage_order ASC
       `);
       return SuccessHandler(
         'Approval stages fetched successfully',

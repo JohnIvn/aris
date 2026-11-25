@@ -8,9 +8,105 @@ import {
   DEFAULT_PAYROLL_CONFIG,
   computePayrollAmount,
 } from '../payroll/payroll-config.interface';
+import {
+  CreateStageDto,
+  ReorderStagesDto,
+  UpdateStageDto,
+} from './dto/approvals.dto';
 
-export type StageRole = 'Checker' | 'Secretary' | 'HR' | 'Accounting';
+export type StageRole = string;
 export type StatusKind = 'Pending' | 'Approved' | 'Disapproved' | 'Flagged';
+
+export interface ApprovalStageItem {
+  id?: string;
+  stage_key: string;
+  label: string;
+  role_name: string;
+  stage_order: number;
+  document_type?: 'AR' | 'DTR' | 'ALL';
+  color?: string;
+  description?: string;
+  is_final: boolean;
+  is_active?: boolean;
+}
+
+export const LEGACY_AR_STAGES: ApprovalStageItem[] = [
+  {
+    stage_key: 'AR-AP-STG-1',
+    label: 'Checker',
+    role_name: 'Checker',
+    stage_order: 1,
+    color: '#3a7d4e',
+    description: 'Initial verification of attendance and accomplishment report entries',
+    is_final: false,
+  },
+  {
+    stage_key: 'AR-AP-STG-2',
+    label: 'Secretary',
+    role_name: 'Secretary',
+    stage_order: 2,
+    color: '#3f8ecc',
+    description: 'College/Department secretary review and endorsement',
+    is_final: false,
+  },
+  {
+    stage_key: 'AR-AP-STG-3',
+    label: 'HR',
+    role_name: 'HR',
+    stage_order: 3,
+    color: '#8a63c4',
+    description: 'Human Resources validation and employment policy compliance',
+    is_final: false,
+  },
+  {
+    stage_key: 'AR-AP-STG-4',
+    label: 'Accounting',
+    role_name: 'Accounting',
+    stage_order: 4,
+    color: '#d99a2b',
+    description: 'Final accounting audit and payroll release clearance',
+    is_final: true,
+  },
+];
+
+export const LEGACY_DTR_STAGES: ApprovalStageItem[] = [
+  {
+    stage_key: 'DTR-AP-STG-1',
+    label: 'Checker',
+    role_name: 'Checker',
+    stage_order: 1,
+    color: '#3a7d4e',
+    description: 'Verification of raw attendance and duty hours',
+    is_final: false,
+  },
+  {
+    stage_key: 'DTR-AP-STG-2',
+    label: 'Secretary',
+    role_name: 'Secretary',
+    stage_order: 2,
+    color: '#3f8ecc',
+    description: 'Department secretary endorsement of logged shifts',
+    is_final: false,
+  },
+  {
+    stage_key: 'DTR-AP-STG-3',
+    label: 'HR',
+    role_name: 'HR',
+    stage_order: 3,
+    color: '#8a63c4',
+    description: 'HR verification of biometric logs and duty records',
+    is_final: false,
+  },
+  {
+    stage_key: 'DTR-AP-STG-4',
+    label: 'Accounting',
+    role_name: 'Accounting',
+    stage_order: 4,
+    color: '#d99a2b',
+    description: 'Final DTR payroll verification and release',
+    is_final: true,
+  },
+];
 
 export interface ApprovalRecordTable {
   title: string;
@@ -43,7 +139,13 @@ export interface ApprovalItem {
   period: string;
   reference: string;
   submitted: string;
-  stage: StageRole;
+  stage: string;
+  stageRole: string;
+  stageColor: string;
+  stageOrder: number;
+  currentStageIndex: number;
+  isPastFlow: boolean;
+  stages: ApprovalStageItem[];
   status: StatusKind;
   event: string;
   record: ApprovalRecordPayload;
@@ -82,45 +184,64 @@ function formatDate(date: Date | string | null): string {
   });
 }
 
-const STAGE_ORDER_MAP: Record<number, StageRole> = {
-  1: 'Checker',
-  2: 'Secretary',
-  3: 'HR',
-  4: 'Accounting',
-};
+export function matchesStaffPosition(
+  userPosition: string | null | undefined,
+  stageRole: string | null | undefined,
+  stageLabel: string | null | undefined,
+): boolean {
+  if (!userPosition) return false;
+  const pos = userPosition.trim().toLowerCase();
+  const r = (stageRole || '').trim().toLowerCase();
+  const l = (stageLabel || '').trim().toLowerCase();
 
-const STAGE_KEY_MAP: Record<string, StageRole> = {
-  'AR-AP-STG-1': 'Checker',
-  'AR-AP-STG-2': 'Secretary',
-  'AR-AP-STG-3': 'HR',
-  'AR-AP-STG-4': 'Accounting',
-};
+  // Canonical standard role checks
+  if (pos.includes('check') && (r.includes('check') || l.includes('check'))) return true;
+  if (pos.includes('sec') && (r.includes('sec') || l.includes('sec'))) return true;
+  if ((pos.includes('hr') || pos.includes('human')) && (r.includes('hr') || l.includes('hr') || r.includes('human') || l.includes('human'))) return true;
+  if ((pos.includes('account') || pos.includes('payroll')) && (r.includes('account') || l.includes('account') || r.includes('payroll') || l.includes('payroll'))) return true;
 
-const NEXT_STAGE_KEY: Record<StageRole, string> = {
-  Checker: 'AR-AP-STG-2',
-  Secretary: 'AR-AP-STG-3',
-  HR: 'AR-AP-STG-4',
-  Accounting: 'AR-AP-STG-4',
-};
+  // General flexible match
+  if (r && (pos.includes(r) || r.includes(pos))) return true;
+  if (l && (pos.includes(l) || l.includes(pos))) return true;
 
-const DTR_STAGE_KEY_MAP: Record<string, StageRole> = {
-  'DTR-AP-STG-1': 'Checker',
-  'DTR-AP-STG-2': 'Secretary',
-  'DTR-AP-STG-3': 'HR',
-  'DTR-AP-STG-4': 'Accounting',
-};
+  return false;
+}
 
-const DTR_NEXT_STAGE_KEY: Record<StageRole, string> = {
-  Checker: 'DTR-AP-STG-2',
-  Secretary: 'DTR-AP-STG-3',
-  HR: 'DTR-AP-STG-4',
-  Accounting: 'DTR-AP-STG-4',
-};
+export function resolveItemStages(
+  snapshot: any,
+  type: 'AR' | 'DTR',
+): { stages: ApprovalStageItem[]; isPastFlow: boolean } {
+  if (snapshot) {
+    try {
+      const parsed = typeof snapshot === 'string' ? JSON.parse(snapshot) : snapshot;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return {
+          stages: parsed.map((s, idx) => ({
+            id: s.id,
+            stage_key: s.stage_key || `${type}-AP-STG-${idx + 1}`,
+            label: s.label || s.role_name || `Stage ${idx + 1}`,
+            role_name: s.role_name || s.label || 'Checker',
+            stage_order: Number(s.stage_order) || idx + 1,
+            document_type: s.document_type || type,
+            color: s.color || '#3a7d4e',
+            description: s.description || '',
+            is_final: Boolean(s.is_final ?? idx === parsed.length - 1),
+            is_active: Boolean(s.is_active ?? true),
+          })),
+          isPastFlow: false,
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
 
-const STAGE_ROLES: StageRole[] = ['Checker', 'Secretary', 'HR', 'Accounting'];
-
-const nextStageOf = (stage: StageRole): StageRole | undefined =>
-  STAGE_ROLES[STAGE_ROLES.indexOf(stage) + 1];
+  // Fallback to legacy canonical flow for past applications
+  return {
+    stages: type === 'AR' ? [...LEGACY_AR_STAGES] : [...LEGACY_DTR_STAGES],
+    isPastFlow: true,
+  };
+}
 
 @Injectable()
 export class ApprovalsService {
@@ -150,47 +271,295 @@ export class ApprovalsService {
     return { ...DEFAULT_PAYROLL_CONFIG };
   }
 
-  async listApprovals(user?: UserSession) {
+  // ==========================================
+  // STAGES CRUD (Admin Managed)
+  // ==========================================
+
+  async getStages(documentType?: string) {
     try {
-      // Determine staff position/role to scope submissions if user is staff
-      let staffRole: StageRole | null = null;
-      if (user?.role === 'staff') {
-        let pos = user.position;
-        if (!pos && user.id) {
-          const staffRes = await this.client.query(
-            'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
-            [user.id],
-          );
-          pos = staffRes.rows[0]?.position;
-        }
-        if (pos) {
-          const lower = pos.trim().toLowerCase();
-          if (lower.includes('check')) staffRole = 'Checker';
-          else if (lower.includes('sec')) staffRole = 'Secretary';
-          else if (lower.includes('hr') || lower.includes('human'))
-            staffRole = 'HR';
-          else if (lower.includes('account') || lower.includes('payroll'))
-            staffRole = 'Accounting';
-        }
+      const query = `
+        SELECT
+          id,
+          stage_key,
+          label,
+          role_name,
+          stage_order,
+          document_type,
+          color,
+          description,
+          is_final,
+          is_active,
+          created_at,
+          updated_at
+        FROM approval_stages
+        WHERE ($1::text IS NULL OR document_type = $1 OR document_type = 'ALL')
+        ORDER BY document_type ASC, stage_order ASC
+      `;
+      const res = await this.client.query(query, [documentType || null]);
+      return SuccessHandler('Approval stages fetched successfully', 200, res.rows);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500)
+        : ErrorHandler('Server Error', 500);
+    }
+  }
+
+  async createStage(user: UserSession, dto: CreateStageDto) {
+    try {
+      if (user.role !== 'admin') {
+        return ErrorHandler('Unauthorized. Admin access required.', 403);
       }
-      // 1. Fetch approval stages
-      const stagesRes = await this.client.query(`
-        SELECT id, stage_key, label, stage_order, is_active
-          FROM approval_stages
-         ORDER BY stage_order ASC
-      `);
-      const stagesMap = new Map<
-        string,
-        { label: string; stage_order: number }
-      >();
-      stagesRes.rows.forEach((s) => {
-        stagesMap.set(s.stage_key, {
-          label: s.label,
-          stage_order: s.stage_order,
-        });
+
+      const docType = dto.document_type || 'AR';
+      const orderRes = await this.client.query(
+        `SELECT COALESCE(MAX(stage_order), 0) + 1 AS next_order
+           FROM approval_stages
+          WHERE document_type = $1`,
+        [docType],
+      );
+      const stageOrder = dto.stage_order || Number(orderRes.rows[0]?.next_order) || 1;
+      const stageKey = `${docType}-AP-STG-${Date.now().toString(36).toUpperCase()}`;
+
+      // If marking as final, unmark other final stages for this document type
+      if (dto.is_final) {
+        await this.client.query(
+          `UPDATE approval_stages
+              SET is_final = FALSE
+            WHERE document_type = $1`,
+          [docType],
+        );
+      }
+
+      const insertRes = await this.client.query(
+        `INSERT INTO approval_stages (
+           stage_key, label, role_name, stage_order, document_type,
+           color, description, is_final, is_active, created_at, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         RETURNING *`,
+        [
+          stageKey,
+          dto.label.trim(),
+          (dto.role_name || dto.label).trim(),
+          stageOrder,
+          docType,
+          dto.color || '#3a7d4e',
+          dto.description || '',
+          Boolean(dto.is_final),
+          dto.is_active !== undefined ? Boolean(dto.is_active) : true,
+        ],
+      );
+
+      await this.loggerService.logUserAction({
+        user_id: user.id,
+        role: user.role,
+        action_type: 'create_stage',
+        action_status: 'success',
+        metadata: { stage: insertRes.rows[0] },
       });
 
-      // 2. Fetch accomplishment reports joined with faculty data
+      return SuccessHandler('Approval stage created successfully', 201, insertRes.rows[0]);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500)
+        : ErrorHandler('Server Error', 500);
+    }
+  }
+
+  async updateStage(user: UserSession, id: string, dto: UpdateStageDto) {
+    try {
+      if (user.role !== 'admin') {
+        return ErrorHandler('Unauthorized. Admin access required.', 403);
+      }
+
+      const existingRes = await this.client.query(
+        `SELECT * FROM approval_stages WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      if (existingRes.rows.length === 0) {
+        return ErrorHandler('Approval stage not found', 404);
+      }
+      const existing = existingRes.rows[0];
+      const docType = dto.document_type || existing.document_type;
+
+      if (dto.is_final) {
+        await this.client.query(
+          `UPDATE approval_stages
+              SET is_final = FALSE
+            WHERE document_type = $1 AND id != $2`,
+          [docType, id],
+        );
+      }
+
+      const updateRes = await this.client.query(
+        `UPDATE approval_stages
+            SET label = COALESCE($1, label),
+                role_name = COALESCE($2, role_name),
+                stage_order = COALESCE($3, stage_order),
+                document_type = COALESCE($4, document_type),
+                color = COALESCE($5, color),
+                description = COALESCE($6, description),
+                is_final = COALESCE($7, is_final),
+                is_active = COALESCE($8, is_active),
+                updated_at = NOW()
+          WHERE id = $9
+          RETURNING *`,
+        [
+          dto.label ? dto.label.trim() : null,
+          dto.role_name ? dto.role_name.trim() : null,
+          dto.stage_order !== undefined ? dto.stage_order : null,
+          dto.document_type || null,
+          dto.color || null,
+          dto.description !== undefined ? dto.description : null,
+          dto.is_final !== undefined ? dto.is_final : null,
+          dto.is_active !== undefined ? dto.is_active : null,
+          id,
+        ],
+      );
+
+      await this.loggerService.logUserAction({
+        user_id: user.id,
+        role: user.role,
+        action_type: 'update_stage',
+        action_status: 'success',
+        metadata: { stage: updateRes.rows[0] },
+      });
+
+      return SuccessHandler('Approval stage updated successfully', 200, updateRes.rows[0]);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500)
+        : ErrorHandler('Server Error', 500);
+    }
+  }
+
+  async deleteStage(user: UserSession, id: string) {
+    try {
+      if (user.role !== 'admin') {
+        return ErrorHandler('Unauthorized. Admin access required.', 403);
+      }
+
+      const existingRes = await this.client.query(
+        `SELECT * FROM approval_stages WHERE id = $1 LIMIT 1`,
+        [id],
+      );
+      if (existingRes.rows.length === 0) {
+        return ErrorHandler('Approval stage not found', 404);
+      }
+      const stage = existingRes.rows[0];
+
+      // Soft delete: marks is_active = FALSE so existing paper flow applications referencing this stage are never corrupted
+      await this.client.query(
+        `UPDATE approval_stages
+            SET is_active = FALSE,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [id],
+      );
+
+      await this.loggerService.logUserAction({
+        user_id: user.id,
+        role: user.role,
+        action_type: 'delete_stage',
+        action_status: 'success',
+        metadata: { stage_id: id, stage_key: stage.stage_key },
+      });
+
+      return SuccessHandler(
+        'Approval stage deactivated successfully. Past paper flow applications referencing it remain safe.',
+        200,
+        { id, deactivated: true },
+      );
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500)
+        : ErrorHandler('Server Error', 500);
+    }
+  }
+
+  async reorderStages(user: UserSession, dto: ReorderStagesDto) {
+    try {
+      if (user.role !== 'admin') {
+        return ErrorHandler('Unauthorized. Admin access required.', 403);
+      }
+
+      for (const item of dto.stages) {
+        await this.client.query(
+          `UPDATE approval_stages
+              SET stage_order = $1,
+                  updated_at = NOW()
+            WHERE id = $2`,
+          [item.stage_order, item.id],
+        );
+      }
+
+      const res = await this.client.query(`
+        SELECT * FROM approval_stages ORDER BY document_type ASC, stage_order ASC
+      `);
+
+      return SuccessHandler('Approval stages reordered successfully', 200, res.rows);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500)
+        : ErrorHandler('Server Error', 500);
+    }
+  }
+
+  async resetStages(user: UserSession) {
+    try {
+      if (user.role !== 'admin') {
+        return ErrorHandler('Unauthorized. Admin access required.', 403);
+      }
+
+      // Restore canonical 4-stage pipelines
+      await this.client.query(`
+        UPDATE approval_stages
+           SET is_active = FALSE
+         WHERE stage_key NOT IN ('AR-AP-STG-1', 'AR-AP-STG-2', 'AR-AP-STG-3', 'AR-AP-STG-4',
+                                 'DTR-AP-STG-1', 'DTR-AP-STG-2', 'DTR-AP-STG-3', 'DTR-AP-STG-4');
+
+        UPDATE approval_stages
+           SET is_active = TRUE,
+               stage_order = CASE stage_key
+                 WHEN 'AR-AP-STG-1' THEN 1
+                 WHEN 'AR-AP-STG-2' THEN 2
+                 WHEN 'AR-AP-STG-3' THEN 3
+                 WHEN 'AR-AP-STG-4' THEN 4
+                 WHEN 'DTR-AP-STG-1' THEN 1
+                 WHEN 'DTR-AP-STG-2' THEN 2
+                 WHEN 'DTR-AP-STG-3' THEN 3
+                 WHEN 'DTR-AP-STG-4' THEN 4
+                 ELSE stage_order
+               END;
+      `);
+
+      const res = await this.client.query(`
+        SELECT * FROM approval_stages WHERE is_active = TRUE ORDER BY document_type ASC, stage_order ASC
+      `);
+
+      return SuccessHandler('Approval stages reset to default canonical pipeline', 200, res.rows);
+    } catch (error) {
+      return error instanceof Error
+        ? ErrorHandler(error.message, 500)
+        : ErrorHandler('Server Error', 500);
+    }
+  }
+
+  // ==========================================
+  // LIST APPROVALS (Scoped with Dynamic Stages)
+  // ==========================================
+
+  async listApprovals(user?: UserSession) {
+    try {
+      let staffPosition = user?.position || null;
+      if (user?.role === 'staff' && !staffPosition && user.id) {
+        const staffRes = await this.client.query(
+          'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
+          [user.id],
+        );
+        staffPosition = staffRes.rows[0]?.position || null;
+      }
+
+      // 1. Fetch accomplishment reports joined with faculty data
       const arRes = await this.client.query(`
         SELECT
           ar.id,
@@ -202,6 +571,8 @@ export class ApprovalsService {
           ar.approval_stage,
           COALESCE(ast.label, ar.approval_stage) AS stage_label,
           COALESCE(ast.stage_order, 1) AS stage_order,
+          COALESCE(ast.color, '#3a7d4e') AS stage_color,
+          COALESCE(ast.role_name, ast.label, 'Checker') AS stage_role,
           ar.remarks,
           ar.payroll_availability,
           ar.payroll_received,
@@ -217,6 +588,7 @@ export class ApprovalsService {
           ar.submission_topics,
           ar.submission_notes,
           ar.submission_payload,
+          ar.workflow_snapshot,
           ar.current_stage AS submission_stage,
           COALESCE(NULLIF(TRIM(rev_staff.firstname || ' ' || rev_staff.lastname), ''), NULLIF(TRIM(rev_prof.firstname || ' ' || rev_prof.lastname), ''), ast.label) AS reviewer_name
         FROM accomplishment_reports ar
@@ -228,7 +600,7 @@ export class ApprovalsService {
         ORDER BY ar.updated_at DESC, ar.created_at DESC
       `);
 
-      // 3. Fetch report entries
+      // 2. Fetch report entries
       const entriesRes = await this.client.query(`
         SELECT
           re.id,
@@ -258,27 +630,22 @@ export class ApprovalsService {
         entriesByReport.set(entry.report_id, list);
       });
 
-      // 4. Fetch submitted DTR documents and linked attendance entries
+      // 3. Fetch submitted DTR documents and linked attendance entries
       const dtrRes = await this.client.query(`
         SELECT
           ds.id AS submission_id,
           ds.period_start,
           ds.period_end,
           ds.approval_stage,
-          COALESCE(
-            ast.label,
-            CASE ds.approval_stage
-              WHEN 'DTR-AP-STG-1' THEN 'Checker'
-              WHEN 'DTR-AP-STG-2' THEN 'Secretary'
-              WHEN 'DTR-AP-STG-3' THEN 'HR'
-              WHEN 'DTR-AP-STG-4' THEN 'Accounting'
-              ELSE ds.approval_stage
-            END
-          ) AS stage_label,
+          COALESCE(ast.label, ds.approval_stage) AS stage_label,
           COALESCE(ast.stage_order, 1) AS stage_order,
+          COALESCE(ast.color, '#3a7d4e') AS stage_color,
+          COALESCE(ast.role_name, ast.label, 'Checker') AS stage_role,
           ds.status AS submission_status,
           ds.remarks,
           ds.attachment_name,
+          ds.workflow_snapshot,
+          ds.current_stage AS dtr_current_stage,
           ds.submitted_at,
           ds.updated_at AS submission_updated_at,
           d.id,
@@ -401,11 +768,26 @@ export class ApprovalsService {
         const periodStr = `${formatDate(ar.period_start)} – ${formatDate(ar.period_end)}`;
         const refStr = `AR-${ar.faculty_no || '000'}-${ar.id.slice(0, 8).toUpperCase()}`;
 
-        // Stage mapping: 1 -> Checker, 2 -> Secretary, 3 -> HR, 4 -> Accounting
-        const stage: StageRole =
-          STAGE_KEY_MAP[ar.approval_stage] ||
-          STAGE_ORDER_MAP[ar.stage_order] ||
-          'Checker';
+        // Dynamic workflow stage resolution (preserving past flow applications)
+        const { stages, isPastFlow } = resolveItemStages(ar.workflow_snapshot, 'AR');
+        let currentStageIndex = stages.findIndex(
+          (s) => s.stage_key === ar.approval_stage,
+        );
+        if (currentStageIndex === -1 && ar.submission_stage) {
+          currentStageIndex = stages.findIndex(
+            (s) => s.label.toLowerCase() === ar.submission_stage.toLowerCase(),
+          );
+        }
+        if (currentStageIndex === -1) {
+          currentStageIndex = 0;
+        }
+
+        const currentStageObj = stages[currentStageIndex] || stages[0];
+        const stageLabel = currentStageObj?.label || ar.stage_label || 'Checker';
+        const stageRole = currentStageObj?.role_name || currentStageObj?.label || 'Checker';
+        const stageColor = currentStageObj?.color || ar.stage_color || '#3a7d4e';
+        const stageOrder = currentStageObj?.stage_order || currentStageIndex + 1;
+        const isFinalStage = Boolean(currentStageObj?.is_final || currentStageIndex === stages.length - 1);
 
         const isDisapproved =
           ar.submission_status === 'disapproved' ||
@@ -423,9 +805,8 @@ export class ApprovalsService {
           ) ||
             Boolean(ar.remarks && /resubmit/i.test(ar.remarks)));
 
-        // Status mapping
         let status: StatusKind = 'Pending';
-        let action = 'AR submitted';
+        let action = `AR submitted · ${stageLabel}`;
 
         if (isDisapproved) {
           status = 'Disapproved';
@@ -433,26 +814,19 @@ export class ApprovalsService {
         } else if (isResubmitted) {
           status = 'Pending';
           action = 'AR resubmitted with corrections · Pending review';
-        } else if (ar.approval_stage === 'AR-AP-STG-4' || ar.stage_order >= 4) {
-          status =
-            ar.payroll_availability || ar.payroll_received
-              ? 'Approved'
-              : 'Pending';
+        } else if (ar.submission_status === 'approved' || (isFinalStage && (ar.payroll_availability || ar.payroll_received))) {
+          status = 'Approved';
           action = ar.payroll_received
             ? 'AR approved · Payroll received'
             : ar.payroll_availability
               ? 'AR approved · Payroll released'
-              : 'AR in Accounting validation';
-        } else if (ar.stage_order === 3) {
-          action = 'AR endorsed by Secretary to HR';
-        } else if (ar.stage_order === 2) {
-          action = 'AR verified by Checker, endorsed to Secretary';
+              : `AR in ${stageLabel} validation`;
         } else {
-          action = 'AR submitted · Pending checker review';
+          action = ar.submission_event || `AR pending review at ${stageLabel}`;
         }
 
         const reviewer =
-          ar.reviewer_name || (stage ? `${stage} Reviewer` : 'Reviewer');
+          ar.reviewer_name || (stageLabel ? `${stageLabel} Reviewer` : 'Reviewer');
 
         const reviewedAt = `${formatDate(ar.updated_at || ar.created_at)} · ${formatTime(ar.updated_at || ar.created_at)}`;
         const submitted = `${formatDate(ar.created_at)} · ${formatTime(ar.created_at)}`;
@@ -465,7 +839,13 @@ export class ApprovalsService {
           period: periodStr,
           reference: refStr,
           submitted,
-          stage,
+          stage: stageLabel,
+          stageRole,
+          stageColor,
+          stageOrder,
+          currentStageIndex,
+          isPastFlow,
+          stages,
           status,
           event: `${action} · ${entryCount} outputs`,
           record: {
@@ -489,11 +869,11 @@ export class ApprovalsService {
             reviewer,
             reviewedAt,
             remark: isDisapproved
-              ? ar.remarks || `Disapproved at ${stage} stage.`
+              ? ar.remarks || `Disapproved at ${stageLabel} stage.`
               : isResubmitted
                 ? 'Resubmitted with corrections. Pending review.'
                 : ar.remarks ||
-                  `Current Stage: ${stage}. Awaiting verification.`,
+                  `Current Stage: ${stageLabel}. Awaiting verification.`,
           },
         });
       }
@@ -537,12 +917,29 @@ export class ApprovalsService {
           },
         ];
 
-        const stage: StageRole =
-          DTR_STAGE_KEY_MAP[first.approval_stage] ||
-          STAGE_ORDER_MAP[Number(first.stage_order)] ||
-          'Checker';
+        // Dynamic workflow stage resolution (preserving past flow applications)
+        const { stages, isPastFlow } = resolveItemStages(first.workflow_snapshot, 'DTR');
+        let currentStageIndex = stages.findIndex(
+          (s) => s.stage_key === first.approval_stage,
+        );
+        if (currentStageIndex === -1 && first.dtr_current_stage) {
+          currentStageIndex = stages.findIndex(
+            (s) => s.label.toLowerCase() === first.dtr_current_stage.toLowerCase(),
+          );
+        }
+        if (currentStageIndex === -1) {
+          currentStageIndex = 0;
+        }
+
+        const currentStageObj = stages[currentStageIndex] || stages[0];
+        const stageLabel = currentStageObj?.label || first.stage_label || 'Checker';
+        const stageRole = currentStageObj?.role_name || currentStageObj?.label || 'Checker';
+        const stageColor = currentStageObj?.color || first.stage_color || '#3a7d4e';
+        const stageOrder = currentStageObj?.stage_order || currentStageIndex + 1;
+        const isFinalStage = Boolean(currentStageObj?.is_final || currentStageIndex === stages.length - 1);
+
         let status: StatusKind = 'Pending';
-        let action = `DTR submitted · ${first.stage_label || stage}`;
+        let action = `DTR submitted · ${stageLabel}`;
 
         const isDtrDisapproved =
           first.submission_status === 'disapproved' ||
@@ -554,10 +951,7 @@ export class ApprovalsService {
         if (isDtrDisapproved) {
           status = 'Disapproved';
           action = 'DTR returned for correction';
-        } else if (
-          first.submission_status === 'approved' ||
-          stage === 'Accounting'
-        ) {
+        } else if (first.submission_status === 'approved' || (isFinalStage && first.submission_status !== 'pending')) {
           status = 'Approved';
         }
 
@@ -574,7 +968,13 @@ export class ApprovalsService {
           period: periodStr,
           reference,
           submitted,
-          stage,
+          stage: stageLabel,
+          stageRole,
+          stageColor,
+          stageOrder,
+          currentStageIndex,
+          isPastFlow,
+          stages,
           status,
           event: `${action} · ${daysLogged} days`,
           record: {
@@ -586,18 +986,23 @@ export class ApprovalsService {
             tables,
             notes: `Total duty hours rendered: ${totalHours} hrs across ${daysLogged} working days.`,
             attachment: first.attachment_name || undefined,
-            reviewer: first.stage_label || stage,
+            reviewer: stageLabel,
             reviewedAt: `${formatDate(first.submitted_at)} · ${formatTime(first.submitted_at)}`,
             remark:
               first.remarks ||
-              `Current Stage: ${stage}. Awaiting verification.`,
+              `Current Stage: ${stageLabel}. Awaiting verification.`,
           },
         });
       });
 
-      const scopedItems = staffRole
-        ? items.filter((it) => it.stage === staffRole)
-        : items;
+      // Filter by user role/position if staff
+      let scopedItems = items;
+      if (user?.role === 'staff' && staffPosition) {
+        scopedItems = items.filter((it) =>
+          matchesStaffPosition(staffPosition, it.stageRole, it.stage),
+        );
+      }
+
       return SuccessHandler('Approvals fetched successfully', 200, scopedItems);
     } catch (error) {
       if (error instanceof Error) {
@@ -607,536 +1012,477 @@ export class ApprovalsService {
     }
   }
 
+  // ==========================================
+  // DECISION HANDLER (Dynamic & Past-Preserving)
+  // ==========================================
+
   async handleDecision(user: UserSession, payload: any) {
     try {
-      // Support array of items (like whole queue save from client) or single decision
       if (Array.isArray(payload)) {
         return SuccessHandler('Queue updated successfully', 200, {
           updated: payload.length,
         });
       }
 
-      const { id, action, remark, stage, role } = payload;
+      const { id, action, remark } = payload;
       if (!id) {
         return ErrorHandler('Missing approval item ID', 400);
       }
 
+      let staffPosition = user.position || null;
+      if (user.role === 'staff' && !staffPosition && user.id) {
+        const staffRes = await this.client.query(
+          'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
+          [user.id],
+        );
+        staffPosition = staffRes.rows[0]?.position || null;
+      }
+
+      // Check if item is DTR Submission
       const dtrSubmission = await this.client.query(
-        `SELECT id, approval_stage, status
+        `SELECT id, approval_stage, status, workflow_snapshot, current_stage
            FROM dtr_submissions
           WHERE id = $1
           LIMIT 1`,
         [id],
       );
-      if (dtrSubmission.rows.length > 0) {
-        let currentRole: StageRole | null = null;
-        if (user.role === 'staff') {
-          const staffRes = await this.client.query(
-            'SELECT position FROM user_staffs WHERE id = $1 LIMIT 1',
-            [user.id],
-          );
-          const position = (staffRes.rows[0]?.position || user.position || '')
-            .trim()
-            .toLowerCase();
-          if (position.includes('check')) currentRole = 'Checker';
-          else if (position.includes('sec')) currentRole = 'Secretary';
-          else if (position.includes('hr') || position.includes('human'))
-            currentRole = 'HR';
-          else if (position.includes('account') || position.includes('payroll'))
-            currentRole = 'Accounting';
-        }
 
-        const currentStage =
-          DTR_STAGE_KEY_MAP[dtrSubmission.rows[0].approval_stage] || 'Checker';
-        if (!currentRole || currentRole !== currentStage) {
+      if (dtrSubmission.rows.length > 0) {
+        const dtr = dtrSubmission.rows[0];
+        const { stages } = resolveItemStages(dtr.workflow_snapshot, 'DTR');
+
+        let currentIdx = stages.findIndex((s) => s.stage_key === dtr.approval_stage);
+        if (currentIdx === -1 && dtr.current_stage) {
+          currentIdx = stages.findIndex(
+            (s) => s.label.toLowerCase() === dtr.current_stage.toLowerCase(),
+          );
+        }
+        if (currentIdx === -1) currentIdx = 0;
+
+        const currentStage = stages[currentIdx];
+
+        // Permission check for staff
+        if (
+          user.role === 'staff' &&
+          !matchesStaffPosition(staffPosition, currentStage?.role_name, currentStage?.label)
+        ) {
           return ErrorHandler(
-            'You cannot decide this DTR at its current stage',
+            `You do not have permission to act on this DTR at the ${currentStage?.label || 'current'} stage`,
             403,
           );
         }
 
-        const disapproved = action === 'Disapprove';
-        const nextStage = nextStageOf(currentStage);
-        const nextStageKey = nextStage
-          ? DTR_NEXT_STAGE_KEY[currentStage]
-          : 'DTR-AP-STG-4';
-        const nextStatus = disapproved
-          ? 'disapproved'
+        const isDisapproved = action === 'Disapprove';
+        const isFinalStage = Boolean(currentStage?.is_final || currentIdx >= stages.length - 1);
+        const nextStage = !isFinalStage && !isDisapproved ? stages[currentIdx + 1] : null;
+
+        const nextStatus = isDisapproved ? 'disapproved' : isFinalStage ? 'approved' : 'pending';
+        const nextStageKey = isDisapproved
+          ? dtr.approval_stage
           : nextStage
-            ? 'pending'
-            : 'approved';
-        const remarkText =
-          remark ||
-          (disapproved
-            ? `DTR returned for correction by ${currentStage}.`
-            : nextStage
-              ? `Approved at ${currentStage} stage and forwarded to ${nextStage}.`
-              : 'Approved at the final stage and cleared for payroll.');
+            ? nextStage.stage_key
+            : dtr.approval_stage;
+        const nextStageLabel = isDisapproved
+          ? currentStage?.label
+          : nextStage
+            ? nextStage.label
+            : currentStage?.label;
+
+        const defaultRemark = isDisapproved
+          ? `DTR returned for correction by ${currentStage?.label}.`
+          : nextStage
+            ? `Approved at ${currentStage?.label} stage and forwarded to ${nextStage.label}.`
+            : `Approved at final stage (${currentStage?.label}) and cleared for payroll.`;
+
+        const remarkText = remark || defaultRemark;
 
         await this.client.query(
           `UPDATE dtr_submissions
               SET approval_stage = $1,
-                  status = $2,
-                  remarks = $3,
+                  current_stage = $2,
+                  status = $3,
+                  remarks = $4,
                   updated_at = NOW()
-            WHERE id = $4`,
-          [
-            disapproved ? dtrSubmission.rows[0].approval_stage : nextStageKey,
-            nextStatus,
-            remarkText,
-            id,
-          ],
-        );
-        return SuccessHandler('DTR decision saved successfully', 200, {
-          id,
-          action,
-          remark: remarkText,
-          stage: disapproved ? currentStage : nextStage || currentStage,
-          status: nextStatus,
-        });
-      }
-
-      // Check if it's an Accomplishment Report (UUID)
-      const isUUID =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-          id,
+            WHERE id = $5`,
+          [nextStageKey, nextStageLabel, nextStatus, remarkText, id],
         );
 
-      if (isUUID) {
-        const arCheck = await this.client.query(
-          `SELECT id, approval_stage, remarks FROM accomplishment_reports WHERE id = $1`,
-          [id],
-        );
-
-        if (arCheck.rows.length === 0) {
-          return ErrorHandler('Report not found', 404);
-        }
-
-        const currentStageKey = arCheck.rows[0].approval_stage;
-        const currentStageRole: StageRole =
-          STAGE_KEY_MAP[currentStageKey] || (stage as StageRole) || 'Checker';
-
-        const isAccountingApproval =
-          action === 'Approve' &&
-          (currentStageRole === 'Accounting' ||
-            currentStageKey === 'AR-AP-STG-4' ||
-            stage === 'Accounting' ||
-            role === 'Accounting' ||
-            (user as any)?.position === 'Accounting');
-
-        let payrollResult: any = null;
-
-        if (action === 'Approve') {
-          const nextStageKey = isAccountingApproval
-            ? 'AR-AP-STG-4'
-            : NEXT_STAGE_KEY[currentStageRole] || 'AR-AP-STG-4';
-          const isFinal = isAccountingApproval;
-
-          const remarkText =
-            remark ||
-            (isFinal
-              ? `Approved by ${role || currentStageRole} and cleared for payroll.`
-              : `Approved at ${role || currentStageRole} stage and forwarded to next stage.`);
-
-          const nextStageRole = STAGE_KEY_MAP[nextStageKey] || 'Accounting';
-
-          await this.client.query(
-            `UPDATE accomplishment_reports
-                SET approval_stage = $1,
-                    remarks = $2,
-                    payroll_availability = (CASE WHEN $3::boolean = TRUE THEN TRUE ELSE payroll_availability END),
-                    payroll_received_date = (CASE WHEN $3::boolean = TRUE AND payroll_received_date IS NULL THEN NOW() ELSE payroll_received_date END),
-                    updated_at = NOW()
-              WHERE id = $4`,
-            [nextStageKey, remarkText, isAccountingApproval, id],
+        let dtrPayrollResult: any = null;
+        if (!isDisapproved && isFinalStage) {
+          // Final DTR Clearance triggers payroll calculation
+          const dtrLogsRes = await this.client.query(
+            `SELECT d.id, d.shift_date, d.time_in, d.time_out, d.total_hours, ds.professor_id
+               FROM dtr_submissions ds
+               JOIN dtr_submission_entries dse ON dse.submission_id = ds.id
+               JOIN dtr d ON d.id = dse.dtr_id
+              WHERE ds.id = $1
+              ORDER BY d.shift_date DESC`,
+            [id],
           );
 
-          await this.client.query(
-            `UPDATE accomplishment_reports
-                SET submission_status = (CASE WHEN $1::boolean = TRUE THEN 'approved' ELSE 'pending' END),
-                    current_stage = $2,
-                    current_since = NOW(),
-                    reviewed_by = $3,
-                    reviewed_at = NOW(),
-                    submission_notes = $4,
-                    submission_event = $5,
-                    updated_at = NOW()
-              WHERE id = $6`,
-            [
-              isAccountingApproval,
-              nextStageRole,
-              user.id,
-              remarkText,
-              isAccountingApproval
-                ? 'AR approved by Accounting · Cleared for payroll'
-                : `AR approved by ${role || currentStageRole} · Forwarded to ${nextStageRole}`,
-              id,
-            ],
-          );
-
-          if (isAccountingApproval) {
-            // Automatically calculate payroll based on dynamic rates configuration
-            const payrollConfig = await this.getPayrollConfig();
-
-            const entriesRes = await this.client.query(
-              `SELECT id, units, shift_hours, shift_start, shift_end, class_date
-                 FROM report_entries
-                WHERE report_id = $1`,
-              [id],
-            );
-
-            const arInfoRes = await this.client.query(
-              `SELECT
-                 ar.id,
-                 ar.user_id,
-                 ar.employee_id,
-                 ar.faculty_no,
-                 ar.period_start,
-                 ar.period_end,
-                 COALESCE(up.firstname || ' ' || up.lastname, us.firstname || ' ' || us.lastname, 'Faculty') AS faculty_name,
-                 COALESCE(up.id, ar.user_id) AS prof_id,
-                 COALESCE(up.employee_id, ar.employee_id, ar.faculty_no) AS emp_id,
-                 up.position AS faculty_position
-               FROM accomplishment_reports ar
-               LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
-               LEFT JOIN user_staffs us ON us.id = ar.user_id OR us.employee_id = ar.employee_id
-               WHERE ar.id = $1 LIMIT 1`,
-              [id],
-            );
-
-            const arInfo = arInfoRes.rows[0] || {};
+          if (dtrLogsRes.rows.length > 0) {
+            const profId = dtrLogsRes.rows[0].professor_id;
             let totalHours = 0;
-            for (const entry of entriesRes.rows) {
-              let h = Number(entry.shift_hours);
-              if (isNaN(h) || h <= 0) {
-                if (entry.shift_start && entry.shift_end) {
-                  const [sh, sm] = String(entry.shift_start)
-                    .split(':')
-                    .map(Number);
-                  const [eh, em] = String(entry.shift_end)
-                    .split(':')
-                    .map(Number);
-                  const diff = eh * 60 + (em || 0) - (sh * 60 + (sm || 0));
-                  h = diff > 0 ? diff / 60 : 3;
-                } else if (entry.units && Number(entry.units) > 0) {
-                  h = Number(entry.units);
-                } else {
-                  h = 3;
-                }
-              }
+            const daysLogged = dtrLogsRes.rows.length;
+            for (const row of dtrLogsRes.rows) {
+              let h = Number(row.total_hours);
+              if (isNaN(h) || h <= 0) h = 8;
               totalHours += h;
             }
+            if (totalHours <= 0) totalHours = 80;
 
-            if (totalHours <= 0) {
-              totalHours = Number(payrollConfig.defaultCycleHours) || 30; // standard default period duty hours
-            }
-
-            // Dynamic calculation using configured rates and faculty rank
-            const calc = computePayrollAmount(
-              'AR',
-              totalHours,
-              arInfo.faculty_position,
-              payrollConfig,
-            );
-            const hourlyRate = calc.rate;
+            const payrollConfig = await this.getPayrollConfig();
+            const calc = computePayrollAmount('DTR', totalHours, null, payrollConfig);
+            const dtrRate = calc.rate;
             const calculatedSalary = calc.netAmount;
 
-            const periodStr =
-              arInfo.period_start && arInfo.period_end
-                ? `${formatDate(arInfo.period_start)} – ${formatDate(arInfo.period_end)}`
-                : `${formatDate(new Date())}`;
-            const unitsStr = `${totalHours.toFixed(1)} hrs (${entriesRes.rows.length || 1} outputs)`;
-
-            // Put on payroll records
-            const existingPayroll = await this.client.query(
-              `SELECT id FROM payroll WHERE report_id = $1 LIMIT 1`,
-              [id],
+            const profRes = await this.client.query(
+              `SELECT id, firstname, lastname, employee_id FROM user_professors WHERE id = $1 LIMIT 1`,
+              [profId],
             );
+            const prof = profRes.rows[0];
+            const empId = prof?.employee_id || profId.slice(0, 4);
 
-            let payrollId: string;
+            const firstLog = dtrLogsRes.rows[0];
+            const lastLog = dtrLogsRes.rows[dtrLogsRes.rows.length - 1];
+            const periodStr =
+              firstLog && lastLog && firstLog.shift_date && lastLog.shift_date
+                ? `${formatDate(lastLog.shift_date)} – ${formatDate(firstLog.shift_date)}`
+                : `${formatDate(new Date())}`;
+            const unitsStr = `${daysLogged} days (${totalHours.toFixed(1)} hrs)`;
+
             const meta = JSON.stringify({
-              report_id: id,
-              approved_by: user.id,
-              approver_role: role || currentStageRole,
-              faculty_rank: arInfo.faculty_position || 'Faculty',
-              hourly_rate: hourlyRate,
+              submission_id: id,
+              professor_id: profId,
               total_hours: totalHours,
+              days_logged: daysLogged,
+              rate: dtrRate,
               regular_pay: calc.regularPay,
               overload_pay: calc.overloadPay,
               allowance: calc.allowance,
               tax_amount: calc.taxAmount,
+              approved_by: user.id,
+              approver_role: currentStage?.role_name || currentStage?.label,
               formula: calc.formula,
             });
 
-            if (existingPayroll.rows.length > 0) {
-              payrollId = existingPayroll.rows[0].id;
-              await this.client.query(
-                `UPDATE payroll
-                    SET user_id = $1,
-                        professor_id = $2,
-                        employee_id = $3,
-                        type = 'AR',
-                        period = $4,
-                        units = $5,
-                        hours = $6,
-                        rate = $7,
-                        salary = $8,
-                        amount = $8,
-                        status = 'Approved',
-                        date_received = NOW(),
-                        metadata = $9,
-                        updated_at = NOW()
-                  WHERE id = $10`,
-                [
-                  arInfo.prof_id,
-                  arInfo.prof_id,
-                  arInfo.emp_id,
-                  periodStr,
-                  unitsStr,
-                  totalHours,
-                  hourlyRate,
-                  calculatedSalary,
-                  meta,
-                  payrollId,
-                ],
-              );
-            } else {
-              const ins = await this.client.query(
-                `INSERT INTO payroll (
-                   user_id, professor_id, employee_id, report_id,
-                   type, period, units, hours, rate, salary, amount, status, date_received, metadata
-                 ) VALUES (
-                   $1, $2, $3, $4, 'AR', $5, $6, $7, $8, $9, $9, 'Approved', NOW(), $10
-                 ) RETURNING id`,
-                [
-                  arInfo.prof_id,
-                  arInfo.prof_id,
-                  arInfo.emp_id,
-                  id,
-                  periodStr,
-                  unitsStr,
-                  totalHours,
-                  hourlyRate,
-                  calculatedSalary,
-                  meta,
-                ],
-              );
-              payrollId = ins.rows[0].id;
-            }
+            const ins = await this.client.query(
+              `INSERT INTO payroll (
+                 user_id, professor_id, employee_id,
+                 type, period, units, hours, rate, salary, amount, status, date_received, metadata
+               ) VALUES (
+                 $1, $1, $2, 'DTR', $3, $4, $5, $6, $7, $7, 'Approved', NOW(), $8
+               ) RETURNING id`,
+              [profId, empId, periodStr, unitsStr, totalHours, dtrRate, calculatedSalary, meta],
+            );
 
-            // Log into payroll_logs
             await this.client.query(
               `INSERT INTO payroll_logs (
                  action_type, action_status, professor_id, user_id, employee_id, salary, date_received, metadata, created_at
                ) VALUES ('create_payroll', 'success', $1, $1, $2, $3, NOW(), $4, NOW())`,
-              [arInfo.prof_id, arInfo.emp_id, calculatedSalary, meta],
+              [profId, empId, calculatedSalary, meta],
             );
 
-            payrollResult = {
-              id: payrollId,
+            dtrPayrollResult = {
+              id: ins.rows[0]?.id,
               amount: calculatedSalary,
               hours: totalHours,
-              rate: hourlyRate,
+              rate: dtrRate,
               period: periodStr,
               units: unitsStr,
               status: 'Approved',
             };
           }
-        } else {
-          // Disapprove
-          const remarkText =
-            remark ||
-            `Disapproved at ${role || currentStageRole} stage. Returned to faculty for correction.`;
-
-          await this.client.query(
-            `UPDATE accomplishment_reports
-                SET approval_stage = $1,
-                    remarks = $2,
-                    submission_status = 'disapproved',
-                    submission_notes = $2,
-                    submission_event = $3,
-                    reviewed_by = $4,
-                    reviewed_at = NOW(),
-                    current_stage = 'Faculty',
-                    current_since = NOW(),
-                    payroll_availability = FALSE,
-                    payroll_received = FALSE,
-                    payroll_received_date = NULL,
-                    updated_at = NOW()
-              WHERE id = $5`,
-            [
-              currentStageKey,
-              remarkText,
-              `AR returned for correction by ${role || currentStageRole}`,
-              user.id,
-              id,
-            ],
-          );
-
-          await this.client.query(
-            `UPDATE payroll
-                SET status = 'Rejected',
-                    updated_at = NOW()
-              WHERE report_id = $1`,
-            [id],
-          );
         }
 
         await this.loggerService.logUserAction({
           user_id: user.id,
           role: user.role,
-          action_type: 'update_report',
+          action_type: 'update_dtr_submission',
           action_status: 'success',
-          metadata: { report_id: id, action, stage: currentStageRole, remark },
+          metadata: { id, action, stage: currentStage?.label, remark: remarkText },
         });
 
-        return SuccessHandler('Report decision saved successfully', 200, {
+        return SuccessHandler('DTR decision saved successfully', 200, {
           id,
           action,
-          remark,
-          payroll: payrollResult,
+          remark: remarkText,
+          stage: nextStageLabel,
+          status: nextStatus,
+          payroll: dtrPayrollResult,
         });
       }
 
-      // If DTR or non-UUID, log the action and return success
-      let dtrPayrollResult: any = null;
-      const profId = id.startsWith('dtr-') ? id.replace(/^dtr-/, '') : id;
-      const isAccountingDtrApproval =
-        action === 'Approve' &&
-        (stage === 'Accounting' || role === 'Accounting');
+      // Check if it's an Accomplishment Report
+      const arCheck = await this.client.query(
+        `SELECT id, approval_stage, current_stage, workflow_snapshot, remarks
+           FROM accomplishment_reports
+          WHERE id = $1 LIMIT 1`,
+        [id],
+      );
 
-      if (isAccountingDtrApproval) {
-        // Calculate DTR payroll based on logged duty hours
-        const dtrRes = await this.client.query(
-          `SELECT id, shift_date, time_in, time_out, total_hours
-             FROM dtr
-            WHERE professor_id = $1
-            ORDER BY shift_date DESC`,
-          [profId],
+      if (arCheck.rows.length === 0) {
+        return ErrorHandler('Report not found', 404);
+      }
+
+      const ar = arCheck.rows[0];
+      const { stages } = resolveItemStages(ar.workflow_snapshot, 'AR');
+
+      let currentIdx = stages.findIndex((s) => s.stage_key === ar.approval_stage);
+      if (currentIdx === -1 && ar.current_stage) {
+        currentIdx = stages.findIndex(
+          (s) => s.label.toLowerCase() === ar.current_stage.toLowerCase(),
         );
+      }
+      if (currentIdx === -1) currentIdx = 0;
 
-        let totalHours = 0;
-        let daysLogged = dtrRes.rows.length;
-        for (const row of dtrRes.rows) {
-          let h = Number(row.total_hours);
-          if (isNaN(h) || h <= 0) {
-            h = 8;
-          }
-          totalHours += h;
-        }
-        if (totalHours <= 0) {
-          totalHours = 80;
-          daysLogged = 10;
-        }
+      const currentStage = stages[currentIdx];
 
-        const payrollConfig = await this.getPayrollConfig();
-        const calc = computePayrollAmount(
-          'DTR',
-          totalHours,
-          null,
-          payrollConfig,
+      // Permission check for staff
+      if (
+        user.role === 'staff' &&
+        !matchesStaffPosition(staffPosition, currentStage?.role_name, currentStage?.label)
+      ) {
+        return ErrorHandler(
+          `You do not have permission to act on this report at the ${currentStage?.label || 'current'} stage`,
+          403,
         );
-        const dtrRate = calc.rate;
-        const calculatedSalary = calc.netAmount;
+      }
 
-        const profRes = await this.client.query(
-          `SELECT id, firstname, lastname, employee_id FROM user_professors WHERE id = $1 LIMIT 1`,
-          [profId],
-        );
-        const prof = profRes.rows[0];
-        const empId = prof?.employee_id || profId.slice(0, 4);
+      const isDisapproved = action === 'Disapprove';
+      const isFinalStage = Boolean(currentStage?.is_final || currentIdx >= stages.length - 1);
+      const nextStage = !isFinalStage && !isDisapproved ? stages[currentIdx + 1] : null;
 
-        const first = dtrRes.rows[0];
-        const last = dtrRes.rows[dtrRes.rows.length - 1];
-        const periodStr =
-          first && last && first.shift_date && last.shift_date
-            ? `${formatDate(last.shift_date)} – ${formatDate(first.shift_date)}`
-            : `${formatDate(new Date())}`;
-        const unitsStr = `${daysLogged} days (${totalHours.toFixed(1)} hrs)`;
+      let payrollResult: any = null;
 
-        const meta = JSON.stringify({
-          dtr_id: id,
-          professor_id: profId,
-          total_hours: totalHours,
-          days_logged: daysLogged,
-          rate: dtrRate,
-          regular_pay: calc.regularPay,
-          overload_pay: calc.overloadPay,
-          allowance: calc.allowance,
-          tax_amount: calc.taxAmount,
-          approved_by: user.id,
-          formula: calc.formula,
-        });
-
-        const existing = await this.client.query(
-          `SELECT id FROM payroll WHERE (professor_id = $1 OR employee_id = $2) AND type = 'DTR' LIMIT 1`,
-          [profId, empId],
-        );
-
-        let pId: string;
-        if (existing.rows.length > 0) {
-          pId = existing.rows[0].id;
-          await this.client.query(
-            `UPDATE payroll
-                SET period = $1,
-                    units = $2,
-                    hours = $3,
-                    rate = $4,
-                    salary = $5,
-                    amount = $5,
-                    status = 'Approved',
-                    date_received = NOW(),
-                    metadata = $6,
-                    updated_at = NOW()
-              WHERE id = $7`,
-            [
-              periodStr,
-              unitsStr,
-              totalHours,
-              dtrRate,
-              calculatedSalary,
-              meta,
-              pId,
-            ],
-          );
-        } else {
-          const ins = await this.client.query(
-            `INSERT INTO payroll (
-               user_id, professor_id, employee_id,
-               type, period, units, hours, rate, salary, amount, status, date_received, metadata
-             ) VALUES (
-               $1, $1, $2, 'DTR', $3, $4, $5, $6, $7, $7, 'Approved', NOW(), $8
-             ) RETURNING id`,
-            [
-              profId,
-              empId,
-              periodStr,
-              unitsStr,
-              totalHours,
-              dtrRate,
-              calculatedSalary,
-              meta,
-            ],
-          );
-          pId = ins.rows[0].id;
-        }
+      if (!isDisapproved) {
+        const nextStageKey = nextStage ? nextStage.stage_key : currentStage?.stage_key || ar.approval_stage;
+        const nextStageLabel = nextStage ? nextStage.label : currentStage?.label || 'Approved';
+        const remarkText =
+          remark ||
+          (isFinalStage
+            ? `Approved by ${currentStage?.label} and cleared for payroll.`
+            : `Approved at ${currentStage?.label} stage and forwarded to ${nextStage?.label}.`);
 
         await this.client.query(
-          `INSERT INTO payroll_logs (
-             action_type, action_status, professor_id, user_id, employee_id, salary, date_received, metadata, created_at
-           ) VALUES ('create_payroll', 'success', $1, $1, $2, $3, NOW(), $4, NOW())`,
-          [profId, empId, calculatedSalary, meta],
+          `UPDATE accomplishment_reports
+              SET approval_stage = $1,
+                  remarks = $2,
+                  submission_status = (CASE WHEN $3::boolean = TRUE THEN 'approved' ELSE 'pending' END),
+                  current_stage = $4,
+                  current_since = NOW(),
+                  reviewed_by = $5,
+                  reviewed_at = NOW(),
+                  submission_notes = $2,
+                  submission_event = $6,
+                  payroll_availability = (CASE WHEN $3::boolean = TRUE THEN TRUE ELSE payroll_availability END),
+                  payroll_received_date = (CASE WHEN $3::boolean = TRUE AND payroll_received_date IS NULL THEN NOW() ELSE payroll_received_date END),
+                  updated_at = NOW()
+            WHERE id = $7`,
+          [
+            nextStageKey,
+            remarkText,
+            isFinalStage,
+            nextStageLabel,
+            user.id,
+            isFinalStage
+              ? `AR approved by ${currentStage?.label} · Cleared for payroll`
+              : `AR approved by ${currentStage?.label} · Forwarded to ${nextStage?.label}`,
+            id,
+          ],
         );
 
-        dtrPayrollResult = {
-          id: pId,
-          amount: calculatedSalary,
-          hours: totalHours,
-          rate: dtrRate,
-          period: periodStr,
-          units: unitsStr,
-          status: 'Approved',
-        };
+        if (isFinalStage) {
+          const payrollConfig = await this.getPayrollConfig();
+
+          const entriesRes = await this.client.query(
+            `SELECT id, units, shift_hours, shift_start, shift_end, class_date
+               FROM report_entries
+              WHERE report_id = $1`,
+            [id],
+          );
+
+          const arInfoRes = await this.client.query(
+            `SELECT
+               ar.id,
+               ar.user_id,
+               ar.employee_id,
+               ar.faculty_no,
+               ar.period_start,
+               ar.period_end,
+               COALESCE(up.firstname || ' ' || up.lastname, us.firstname || ' ' || us.lastname, 'Faculty') AS faculty_name,
+               COALESCE(up.id, ar.user_id) AS prof_id,
+               COALESCE(up.employee_id, ar.employee_id, ar.faculty_no) AS emp_id,
+               up.position AS faculty_position
+             FROM accomplishment_reports ar
+             LEFT JOIN user_professors up ON up.id = ar.user_id OR up.employee_id = ar.employee_id
+             LEFT JOIN user_staffs us ON us.id = ar.user_id OR us.employee_id = ar.employee_id
+             WHERE ar.id = $1 LIMIT 1`,
+            [id],
+          );
+
+          const arInfo = arInfoRes.rows[0] || {};
+          let totalHours = 0;
+          for (const entry of entriesRes.rows) {
+            let h = Number(entry.shift_hours);
+            if (isNaN(h) || h <= 0) {
+              if (entry.shift_start && entry.shift_end) {
+                const [sh, sm] = String(entry.shift_start).split(':').map(Number);
+                const [eh, em] = String(entry.shift_end).split(':').map(Number);
+                const diff = eh * 60 + (em || 0) - (sh * 60 + (sm || 0));
+                h = diff > 0 ? diff / 60 : 3;
+              } else if (entry.units && Number(entry.units) > 0) {
+                h = Number(entry.units);
+              } else {
+                h = 3;
+              }
+            }
+            totalHours += h;
+          }
+
+          if (totalHours <= 0) {
+            totalHours = Number(payrollConfig.defaultCycleHours) || 30;
+          }
+
+          const calc = computePayrollAmount('AR', totalHours, arInfo.faculty_position, payrollConfig);
+          const hourlyRate = calc.rate;
+          const calculatedSalary = calc.netAmount;
+
+          const periodStr =
+            arInfo.period_start && arInfo.period_end
+              ? `${formatDate(arInfo.period_start)} – ${formatDate(arInfo.period_end)}`
+              : `${formatDate(new Date())}`;
+          const unitsStr = `${totalHours.toFixed(1)} hrs (${entriesRes.rows.length || 1} outputs)`;
+
+          const existingPayroll = await this.client.query(
+            `SELECT id FROM payroll WHERE report_id = $1 LIMIT 1`,
+            [id],
+          );
+
+          let payrollId: string;
+          const meta = JSON.stringify({
+            report_id: id,
+            approved_by: user.id,
+            approver_role: currentStage?.role_name || currentStage?.label,
+            faculty_rank: arInfo.faculty_position || 'Faculty',
+            hourly_rate: hourlyRate,
+            total_hours: totalHours,
+            regular_pay: calc.regularPay,
+            overload_pay: calc.overloadPay,
+            allowance: calc.allowance,
+            tax_amount: calc.taxAmount,
+            formula: calc.formula,
+          });
+
+          if (existingPayroll.rows.length > 0) {
+            payrollId = existingPayroll.rows[0].id;
+            await this.client.query(
+              `UPDATE payroll
+                  SET user_id = $1,
+                      professor_id = $2,
+                      employee_id = $3,
+                      type = 'AR',
+                      period = $4,
+                      units = $5,
+                      hours = $6,
+                      rate = $7,
+                      salary = $8,
+                      amount = $8,
+                      status = 'Approved',
+                      date_received = NOW(),
+                      metadata = $9,
+                      updated_at = NOW()
+                WHERE id = $10`,
+              [
+                arInfo.prof_id,
+                arInfo.prof_id,
+                arInfo.emp_id,
+                periodStr,
+                unitsStr,
+                totalHours,
+                hourlyRate,
+                calculatedSalary,
+                meta,
+                payrollId,
+              ],
+            );
+          } else {
+            const ins = await this.client.query(
+              `INSERT INTO payroll (
+                 user_id, professor_id, employee_id, report_id,
+                 type, period, units, hours, rate, salary, amount, status, date_received, metadata
+               ) VALUES (
+                 $1, $2, $3, $4, 'AR', $5, $6, $7, $8, $9, $9, 'Approved', NOW(), $10
+               ) RETURNING id`,
+              [
+                arInfo.prof_id,
+                arInfo.prof_id,
+                arInfo.emp_id,
+                id,
+                periodStr,
+                unitsStr,
+                totalHours,
+                hourlyRate,
+                calculatedSalary,
+                meta,
+              ],
+            );
+            payrollId = ins.rows[0].id;
+          }
+
+          await this.client.query(
+            `INSERT INTO payroll_logs (
+               action_type, action_status, professor_id, user_id, employee_id, salary, date_received, metadata, created_at
+             ) VALUES ('create_payroll', 'success', $1, $1, $2, $3, NOW(), $4, NOW())`,
+            [arInfo.prof_id, arInfo.emp_id, calculatedSalary, meta],
+          );
+
+          payrollResult = {
+            id: payrollId,
+            amount: calculatedSalary,
+            hours: totalHours,
+            rate: hourlyRate,
+            period: periodStr,
+            units: unitsStr,
+            status: 'Approved',
+          };
+        }
+      } else {
+        // Disapprove
+        const remarkText =
+          remark ||
+          `Disapproved at ${currentStage?.label} stage. Returned to faculty for correction.`;
+
+        await this.client.query(
+          `UPDATE accomplishment_reports
+              SET remarks = $1,
+                  submission_status = 'disapproved',
+                  submission_notes = $1,
+                  submission_event = $2,
+                  reviewed_by = $3,
+                  reviewed_at = NOW(),
+                  current_stage = 'Faculty',
+                  current_since = NOW(),
+                  payroll_availability = FALSE,
+                  payroll_received = FALSE,
+                  payroll_received_date = NULL,
+                  updated_at = NOW()
+            WHERE id = $4`,
+          [
+            remarkText,
+            `AR returned for correction by ${currentStage?.label}`,
+            user.id,
+            id,
+          ],
+        );
+
+        await this.client.query(
+          `UPDATE payroll
+              SET status = 'Rejected',
+                  updated_at = NOW()
+            WHERE report_id = $1`,
+          [id],
+        );
       }
 
       await this.loggerService.logUserAction({
@@ -1144,14 +1490,16 @@ export class ApprovalsService {
         role: user.role,
         action_type: 'update_report',
         action_status: 'success',
-        metadata: { item_id: id, action, stage, remark },
+        metadata: { report_id: id, action, stage: currentStage?.label, remark },
       });
 
-      return SuccessHandler('Decision recorded successfully', 200, {
+      return SuccessHandler('Report decision saved successfully', 200, {
         id,
         action,
         remark,
-        payroll: dtrPayrollResult,
+        stage: isDisapproved ? 'Faculty' : nextStage ? nextStage.label : currentStage?.label,
+        status: isDisapproved ? 'disapproved' : isFinalStage ? 'approved' : 'pending',
+        payroll: payrollResult,
       });
     } catch (error) {
       if (error instanceof Error) {
